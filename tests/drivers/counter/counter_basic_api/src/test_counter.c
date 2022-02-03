@@ -89,7 +89,12 @@ static const char * const devices[] = {
 #ifdef CONFIG_COUNTER_MCUX_LPC_RTC
 	LABELS_FOR_DT_COMPAT(nxp_lpc_rtc)
 #endif
+#ifdef CONFIG_COUNTER_GECKO_RTCC
 	LABELS_FOR_DT_COMPAT(silabs_gecko_rtcc)
+#endif
+#ifdef CONFIG_COUNTER_GECKO_STIMER
+	LABELS_FOR_DT_COMPAT(silabs_gecko_stimer)
+#endif
 	LABELS_FOR_DT_COMPAT(st_stm32_rtc)
 #ifdef CONFIG_COUNTER_MCUX_PIT
 	LABELS_FOR_DT_COMPAT(nxp_kinetis_pit)

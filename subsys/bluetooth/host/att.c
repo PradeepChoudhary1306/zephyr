@@ -3113,6 +3113,13 @@ struct bt_att_req *bt_att_req_alloc(k_timeout_t timeout)
 {
 	struct bt_att_req *req = NULL;
 
+	if (k_current_get() == bt_recv_thread_id) {
+		/* No req will be fulfilled while blocking on the bt_recv thread.
+		 * Blocking would cause deadlock.
+		 */
+		timeout = K_NO_WAIT;
+	}
+
 	/* Reserve space for request */
 	if (k_mem_slab_alloc(&req_slab, (void **)&req, timeout)) {
 		BT_DBG("No space for req");
@@ -3227,4 +3234,30 @@ void bt_att_req_cancel(struct bt_conn *conn, struct bt_att_req *req)
 	sys_slist_find_and_remove(&att->reqs, &req->node);
 
 	bt_att_req_free(req);
+}
+
+struct bt_att_req *bt_att_find_req_by_user_data(struct bt_conn *conn, const void *user_data)
+{
+	struct bt_att *att;
+	struct bt_att_chan *chan;
+	struct bt_att_req *req;
+
+	att = att_get(conn);
+	if (!att) {
+		return NULL;
+	}
+
+	SYS_SLIST_FOR_EACH_CONTAINER(&att->chans, chan, node) {
+		if (chan->req->user_data == user_data) {
+			return chan->req;
+		}
+	}
+
+	SYS_SLIST_FOR_EACH_CONTAINER(&att->reqs, req, node) {
+		if (req->user_data == user_data) {
+			return req;
+		}
+	}
+
+	return NULL;
 }

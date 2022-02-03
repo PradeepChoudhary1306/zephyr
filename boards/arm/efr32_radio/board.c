@@ -8,6 +8,7 @@
 #include <drivers/gpio.h>
 #include <sys/printk.h>
 
+#if 0
 /* This pin is used to enable the serial port using the board controller */
 #ifdef CONFIG_BOARD_EFR32_RADIO_BRD4180A
 #define VCOM_ENABLE_GPIO_NAME  "GPIO_D"
@@ -16,6 +17,12 @@
 #define VCOM_ENABLE_GPIO_NAME  "GPIO_A"
 #define VCOM_ENABLE_GPIO_PIN   5
 #endif /* CONFIG_BOARD_EFR32_RADIO_BRD4180A */
+#endif
+
+#ifdef CONFIG_BOARD_EFR32_RADIO_BRD4186B
+#define VCOM_ENABLE_GPIO_NAME  "GPIO_B"
+#define VCOM_ENABLE_GPIO_PIN   0
+#endif
 
 static int efr32_radio_init(const struct device *dev)
 {
