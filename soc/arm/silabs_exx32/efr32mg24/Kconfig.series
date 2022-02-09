@@ -2,8 +2,6 @@
 
 # Copyright (c) 2021 Sateesh Kotapati
 # SPDX-License-Identifier: Apache-2.0
-#	select CPU_CORTEX_M_HAS_DWT
-#	select SOC_GECKO_DEV_INIT
 
 config SOC_SERIES_EFR32MG24
 	bool "EFR32MG24 Series MCU"
