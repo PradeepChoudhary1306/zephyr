@@ -22,7 +22,7 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(counter_gecko, CONFIG_COUNTER_LOG_LEVEL);
 
-#define STIMER_MAX_VALUE       (_RTCC_CNT_MASK)
+#define STIMER_MAX_VALUE        0xFFFFFFFFUL
 #define STIMER_ALARM_NUM        2
 
 struct counter_gecko_config {
@@ -270,9 +270,15 @@ BUILD_ASSERT((DT_INST_PROP(0, prescaler) > 0U) &&
 
 static void counter_gecko_0_irq_config(void)
 {
+#ifdef CONFIG_COUNTER_GECKO_RTCC
 	IRQ_DIRECT_CONNECT(DT_INST_IRQN(0),
 			   DT_INST_IRQ(0, priority),
 			   RTCC_IRQHandler, 0);
+#else
+	IRQ_DIRECT_CONNECT(DT_INST_IRQN(0),
+			   DT_INST_IRQ(0, priority),
+			   SYSRTC_APP_IRQHandler, 0);
+#endif
 	irq_enable(DT_INST_IRQN(0));
 }
 

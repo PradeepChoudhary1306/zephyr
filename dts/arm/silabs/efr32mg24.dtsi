@@ -87,21 +87,11 @@
 			label = "I2C_1";
 			status = "disabled";
 		};
-
-		rtcc0: rtcc@48000000 {
-			compatible = "silabs,gecko-rtcc";
-			reg = <0x48000000 0x400>;
-			interrupts = <10 0>;
-			clock-frequency = <32768>;
-			prescaler = <1>;
-			status = "disabled";
-			label = "RTCC_0";
-		};
 		
-		stimer0: stimer@48000000 {
+		stimer0: stimer@400a8000 {
 			compatible = "silabs,gecko-stimer";
-			reg = <0x48000000 0x3054>;
-			interrupts = <12 0>;
+			reg = <0x400a8000 0x3054>;
+			interrupts = <67 0>;
 			clock-frequency = <32768>;
 			prescaler = <1>;
 			status = "disabled";

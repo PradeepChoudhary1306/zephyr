@@ -13,7 +13,7 @@ config SOC_PART_NUMBER
 
 config NUM_IRQS
 	# must be >= the highest interrupt number used
-	default 61
+	default 75
 
 source "soc/arm/silabs_exx32/efr32mg24/Kconfig.defconfig.efr32mg24"
 
