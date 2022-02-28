@@ -49,11 +49,14 @@ static void sli_os_schedule_wakeup(uint32_t expected_idletime_in_os_ticks);
 	/* __WEAK is defined to avoid compilation issue for test application
 	 * (tests/subsys/power/power_mgmt)
 	 */
-__WEAK struct pm_state_info pm_policy_next_state(int32_t ticks);
+__WEAK struct pm_state_info *pm_policy_next_state(uint8_t id, int32_t ticks);
 
 
-static const struct pm_state_info pm_min_residency[] =
-	PM_STATE_INFO_DT_ITEMS_LIST(DT_NODELABEL(cpu0));
+//static struct pm_state_info pm_min_residency[] =
+//	{PM_STATE_LIST_FROM_DT_CPU(DT_NODELABEL(cpu0))};
+static const struct pm_state_info pm_min_residency[1] = {{PM_STATE_STANDBY, 0, 50000, 0}}; 
+struct pm_state_info pm_state_info_active[1] = {{PM_STATE_ACTIVE, 0, 0, 0}}; 
+
 
 #endif
 
@@ -67,7 +70,7 @@ LOG_MODULE_DECLARE(soc, CONFIG_SOC_LOG_LEVEL);
  */
 
 /* Invoke Low Power/System Off specific Tasks */
-void pm_power_state_set(struct pm_state_info info)
+__weak void pm_power_state_set(struct pm_state_info info)
 {
 	LOG_DBG("SoC entering power state %d", info.state);
 
@@ -105,6 +108,7 @@ void pm_power_state_set(struct pm_state_info info)
 			isContextSwitchRequired = false;
 			/* To invoke the scheduler immediately */
 			k_yield();
+			
 		}
 		break;
 
@@ -156,9 +160,10 @@ void pm_power_state_set(struct pm_state_info info)
 }
 
 /* Handle SOC specific activity after Low Power Mode Exit */
-void pm_power_state_exit_post_ops(struct pm_state_info info)
+__weak void pm_power_state_exit_post_ops(struct pm_state_info info)
 {
 	ARG_UNUSED(info);
+	//k_sched_unlock();
 }
 
 #ifdef CONFIG_SOC_GECKO_DEV_INIT
@@ -267,10 +272,9 @@ bool sl_power_manager_is_ok_to_sleep(void)
  * checking whether the ticks is meeting the minimum criteria to enter
  * into SOC specific power policy or not
  */
-__WEAK struct pm_state_info pm_policy_next_state(int ticks)
+__WEAK struct pm_state_info *pm_policy_next_state(uint8_t id, int32_t ticks)
 {
 	int i;
-
 	for (i = ARRAY_SIZE(pm_min_residency) - 1; i >= 0; i--) {
 		if (!pm_constraint_get(pm_min_residency[i].state)) {
 			continue;
@@ -288,9 +292,9 @@ __WEAK struct pm_state_info pm_policy_next_state(int ticks)
 			k_busy_wait(k_ticks_to_us_floor32(1));
 			IdleTicks = ticks - 1;
 
-			return pm_min_residency[i];
+			return ((struct pm_state_info *) &pm_min_residency[i]);
 		}
 	}
-	return (struct pm_state_info){ PM_STATE_ACTIVE, 0, 0 };
+	return (struct pm_state_info *){&pm_state_info_active[0]};
 }
 #endif
