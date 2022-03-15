@@ -154,6 +154,11 @@ config SERIES_2
 	bool
 	help
 	  Series number 2.
+	  
+config SOC_GECKO_SEMAILBOX
+	bool
+	help
+	  TRNG is accessed through se mailbox
 
 config COUNTER_GECKO_STIMER
 	bool

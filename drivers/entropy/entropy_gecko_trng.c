@@ -10,13 +10,20 @@
  #include <string.h>
  #include "soc.h"
  #include "em_cmu.h"
+#ifdef CONFIG_SOC_GECKO_SEMAILBOX 
+#include "sl_se_manager.h"
+#include "sl_se_manager_attestation.h"
+#include "sl_se_manager_util.h"
+#include "sl_se_manager_entropy.h"
+#include "sl_se_manager_key_handling.h"
+#endif
 
+#ifndef CONFIG_SOC_GECKO_SEMAILBOX
 static void entropy_gecko_trng_read(uint8_t *output, size_t len)
 {
-#ifndef CONFIG_CRYPTO_ACC_GECKO_TRNG
 	uint32_t tmp;
 	uint32_t *data = (uint32_t *) output;
-
+#ifndef CONFIG_CRYPTO_ACC_GECKO_TRNG
 	/* Read known good available data. */
 	while (len >= 4) {
 		*data++ = TRNG0->FIFO;
@@ -33,11 +40,13 @@ static void entropy_gecko_trng_read(uint8_t *output, size_t len)
 	memcpy(output, ((const uint8_t *) CRYPTOACC_RNGOUT_FIFO_S_MEM_BASE), len);
 #endif
 }
+#endif
 
 static int entropy_gecko_trng_get_entropy(const struct device *dev,
 					  uint8_t *buffer,
 					  uint16_t length)
 {
+#ifndef CONFIG_SOC_GECKO_SEMAILBOX
 	size_t count = 0;
 	size_t available;
 
@@ -58,15 +67,20 @@ static int entropy_gecko_trng_get_entropy(const struct device *dev,
 		buffer += count;
 		length -= count;
 	}
-
 	return 0;
+#else
+  	// Initialize command context.
+  	sl_se_command_context_t cmd_ctx = { 0 };
+  	sl_status_t sl_status = sl_se_get_random(&cmd_ctx, buffer, length);
+  	return sl_status;
+#endif
 }
 
 static int entropy_gecko_trng_get_entropy_isr(const struct device *dev,
 					      uint8_t *buf,
 					      uint16_t len, uint32_t flags)
 {
-
+#ifndef CONFIG_SOC_GECKO_SEMAILBOX
 	if ((flags & ENTROPY_BUSYWAIT) == 0U) {
 
 		/* No busy wait; return whatever data is available. */
@@ -94,10 +108,19 @@ static int entropy_gecko_trng_get_entropy_isr(const struct device *dev,
 		}
 		return ret;
 	}
+#else
+	int ret = entropy_gecko_trng_get_entropy(dev, buf, len);
+	if (ret == 0) {
+		/* Data retrieved successfully. */
+		return len;
+	}
+	return ret;
+#endif
 }
 
 static int entropy_gecko_trng_init(const struct device *dev)
 {
+#ifndef CONFIG_SOC_GECKO_SEMAILBOX
 	/* Enable the TRNG0 clock. */
 #ifndef CONFIG_CRYPTO_ACC_GECKO_TRNG
 	CMU_ClockEnable(cmuClock_TRNG0, true);
@@ -111,7 +134,7 @@ static int entropy_gecko_trng_init(const struct device *dev)
 	/* Enable TRNG */
 	CRYPTOACC_RNGCTRL->RNGCTRL |= CRYPTOACC_RNGCTRL_ENABLE;
 #endif
-
+#endif
 	return 0;
 }
 
