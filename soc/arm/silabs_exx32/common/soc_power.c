@@ -52,8 +52,6 @@ static void sli_os_schedule_wakeup(uint32_t expected_idletime_in_os_ticks);
 __WEAK struct pm_state_info *pm_policy_next_state(uint8_t id, int32_t ticks);
 
 
-//static struct pm_state_info pm_min_residency[] =
-//	{PM_STATE_LIST_FROM_DT_CPU(DT_NODELABEL(cpu0))};
 static const struct pm_state_info pm_min_residency[1] = {{PM_STATE_STANDBY, 0, 50000, 0}}; 
 struct pm_state_info pm_state_info_active[1] = {{PM_STATE_ACTIVE, 0, 0, 0}}; 
 
