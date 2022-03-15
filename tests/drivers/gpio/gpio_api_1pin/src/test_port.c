@@ -329,7 +329,16 @@ void test_gpio_port_set_bits_clear_bits_raw(void)
 	const struct device *port;
 	gpio_port_value_t val_expected = 0;
 	int ret;
-
+#ifdef CONFIG_SOC_SERIES_EFR32MG24
+	const gpio_port_value_t test_vector[][2] = {
+		/* set value, clear value */
+		{0xEE11EE11, 0xEE11EE10},
+		{0x11EE11EE, (TEST_GPIO_PORT_VALUE_MAX & 0xFFFFFFFE)},
+		{0x00000000, 0x55555554},
+		{TEST_GPIO_PORT_VALUE_MAX, 0xAAAAAAAA},
+		{TEST_GPIO_PORT_VALUE_MAX, (TEST_GPIO_PORT_VALUE_MAX & 0xFFFFFFFE)},
+	};
+#else
 	const gpio_port_value_t test_vector[][2] = {
 		/* set value, clear value */
 		{0xEE11EE11, 0xEE11EE11},
@@ -338,7 +347,7 @@ void test_gpio_port_set_bits_clear_bits_raw(void)
 		{TEST_GPIO_PORT_VALUE_MAX, 0xAAAAAAAA},
 		{TEST_GPIO_PORT_VALUE_MAX, TEST_GPIO_PORT_VALUE_MAX},
 	};
-
+#endif
 	port = device_get_binding(TEST_DEV);
 	zassert_not_null(port, "device " TEST_DEV " not found");
 
@@ -368,7 +377,16 @@ void test_gpio_port_set_bits_clear_bits(void)
 	const struct device *port;
 	gpio_port_value_t val_expected = 0;
 	int ret;
-
+#ifdef CONFIG_SOC_SERIES_EFR32MG24
+	const gpio_port_value_t test_vector[][2] = {
+		/* set value, clear value */
+		{TEST_GPIO_PORT_VALUE_MAX, 0xAAAAAAAA},
+		{0x00000000, (TEST_GPIO_PORT_VALUE_MAX & 0xFFFFFFFE)},
+		{0xCC33CC33, 0x33CC33CC},
+		{0x33CC33CC, 0x33CC33CC},
+		{0x00000000, 0x55555554},
+	};
+#else
 	const gpio_port_value_t test_vector[][2] = {
 		/* set value, clear value */
 		{TEST_GPIO_PORT_VALUE_MAX, 0xAAAAAAAA},
@@ -377,7 +395,7 @@ void test_gpio_port_set_bits_clear_bits(void)
 		{0x33CC33CC, 0x33CC33CC},
 		{0x00000000, 0x55555555},
 	};
-
+#endif
 	port = device_get_binding(TEST_DEV);
 	zassert_not_null(port, "device " TEST_DEV " not found");
 
@@ -407,7 +425,18 @@ void test_gpio_port_set_clr_bits_raw(void)
 	const struct device *port;
 	gpio_port_value_t val_expected = 0;
 	int ret;
-
+#ifdef CONFIG_SOC_SERIES_EFR32MG24
+	const gpio_port_value_t test_vector[][2] = {
+		/* set value, clear value */
+		{0xEE11EE11, 0x11EE11EE},
+		{0x00000000, (TEST_GPIO_PORT_VALUE_MAX & 0xFFFFFFFE)},
+		{0x55555555, 0x00000000},
+		{TEST_GPIO_PORT_VALUE_MAX, 0x00000000},
+		{0x00000000, 0x00000000},
+		{0xAAAAAAAA, 0x00000000},
+		{0x00000000, (TEST_GPIO_PORT_VALUE_MAX & 0xFFFFFFFE)},
+	};
+#else
 	const gpio_port_value_t test_vector[][2] = {
 		/* set value, clear value */
 		{0xEE11EE11, 0x11EE11EE},
@@ -418,7 +447,7 @@ void test_gpio_port_set_clr_bits_raw(void)
 		{0xAAAAAAAA, 0x00000000},
 		{0x00000000, TEST_GPIO_PORT_VALUE_MAX},
 	};
-
+#endif
 	port = device_get_binding(TEST_DEV);
 	zassert_not_null(port, "device " TEST_DEV " not found");
 
@@ -445,7 +474,17 @@ void test_gpio_port_set_clr_bits(void)
 	const struct device *port;
 	gpio_port_value_t val_expected = 0;
 	int ret;
-
+#ifdef CONFIG_SOC_SERIES_EFR32MG24
+	const gpio_port_value_t test_vector[][2] = {
+		/* set value, clear value */
+		{0xEE11EE11, 0x11EE11EE},
+		{0x00000000, (TEST_GPIO_PORT_VALUE_MAX & 0xFFFFFFFE)},
+		{0x55555555, 0x00000000},
+		{TEST_GPIO_PORT_VALUE_MAX, 0x00000000},
+		{0xAAAAAAAA, 0x00000000},
+		{0x00000000, (TEST_GPIO_PORT_VALUE_MAX & 0xFFFFFFFE)},
+	};
+#else
 	const gpio_port_value_t test_vector[][2] = {
 		/* set value, clear value */
 		{0xEE11EE11, 0x11EE11EE},
@@ -455,6 +494,7 @@ void test_gpio_port_set_clr_bits(void)
 		{0xAAAAAAAA, 0x00000000},
 		{0x00000000, TEST_GPIO_PORT_VALUE_MAX},
 	};
+#endif
 
 	port = device_get_binding(TEST_DEV);
 	zassert_not_null(port, "device " TEST_DEV " not found");
@@ -476,3 +516,4 @@ void test_gpio_port_set_clr_bits(void)
 		port_get_and_verify(port, BIT(TEST_PIN), val_expected, i);
 	}
 }
+
