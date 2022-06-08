@@ -28,3 +28,4 @@ properties:
       type: array
       required: true
       description: TX pin configuration defined as <location port pin>
+      

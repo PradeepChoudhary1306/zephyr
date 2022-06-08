@@ -304,3 +304,4 @@ static const struct wdt_driver_api wdt_gecko_driver_api = {
 	}
 
 DT_INST_FOREACH_STATUS_OKAY(GECKO_WDT_INIT)
+

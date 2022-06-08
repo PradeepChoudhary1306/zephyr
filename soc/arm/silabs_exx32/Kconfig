@@ -230,5 +230,10 @@ config SOC_GECKO_HAS_HFRCO_FREQRANGE
 	  via FREQRANGE field. This is supported for e.g. efr32fg1p, efr32mg12p series.
 	  If disabled, indicates that configuration of HFRCO frequency for corresponding SOC
 	  is not supported via this field. This is the case for e.g. efm32hg, efm32wg series.
-
+config BOARD_EFR32BG22_LOG_LEVEL
+	int "Log level for EFR3BG22"
+	default 0
+	help
+	  Log level for EFR3BG22
 endif # SOC_FAMILY_EXX32
+

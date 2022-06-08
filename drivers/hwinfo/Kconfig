@@ -145,3 +145,4 @@ config HWINFO_GECKO
 	  Enable Silabs GECKO hwinfo driver.
 
 endif
+

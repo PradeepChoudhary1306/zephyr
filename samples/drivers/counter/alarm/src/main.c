@@ -118,3 +118,4 @@ void main(void)
 		k_sleep(K_FOREVER);
 	}
 }
+

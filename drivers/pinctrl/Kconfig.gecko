@@ -10,3 +10,4 @@ config PINCTRL_GECKO
 	default $(dt_compat_enabled,$(DT_COMPAT_SILABS_GECKO_PINCTRL))
 	help
 	  Gecko pin controller driver
+	  

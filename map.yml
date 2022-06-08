@@ -1,0 +1,7 @@
+- connected: true
+  available: true
+  id: 000440181769
+  platform: efr32bg_sltb010a
+  product: J-Link OB
+  runner: jlink
+  serial: /dev/ttyACM0

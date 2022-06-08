@@ -47,15 +47,12 @@ static void sli_schedule_wakeup_timer_expire_handler(sl_sleeptimer_timer_handle_
 
 static void sli_os_schedule_wakeup(uint32_t expected_idletime_in_os_ticks);
 
-	/* __WEAK is defined to avoid compilation issue for test application
-	 * (tests/subsys/power/power_mgmt)
-	 */
-__WEAK struct pm_state_info *pm_policy_next_state(uint8_t id, int32_t ticks);
-
-
+#ifndef CONFIG_PM_POLICY_DEFAULT
+struct pm_state_info *pm_policy_next_state(uint8_t cpu, int32_t ticks);
 static const struct pm_state_info pm_min_residency[] =
 	PM_STATE_INFO_LIST_FROM_DT_CPU(DT_NODELABEL(cpu0));
 struct pm_state_info pm_state_active = {PM_STATE_ACTIVE, 0, 0, 0};
+#endif
 
 #endif
 
@@ -84,8 +81,15 @@ __weak void pm_state_set(enum pm_state state, uint8_t substate_id)
 	 * issue using __set_BASEPRI(0) to remove the BASEPRI masking
 	 */
 
+#if 0
 	BasePRI = __get_BASEPRI();
 	__set_BASEPRI(0);
+#else
+	/* Set PRIMASK */
+	//__disable_irq();
+	/* Set BASEPRI to 0 */
+	irq_unlock(0);
+#endif
 
 	switch (state) {
 
@@ -117,8 +121,12 @@ __weak void pm_state_set(enum pm_state state, uint8_t substate_id)
 	}
 
 	LOG_DBG("SoC leaving power state %d", state);
-
+#if 0
 	__set_BASEPRI(BasePRI);
+#else
+	/* Clear PRIMASK */
+	__enable_irq();
+#endif
 
 #else
 
@@ -267,11 +275,12 @@ bool sl_power_manager_is_ok_to_sleep(void)
 	return (ConfirmSleepModeStatus() != false);
 }
 
-/* CONFIG_PM_POLICY_APP allows to define application specific power policy
+#ifndef CONFIG_PM_POLICY_DEFAULT
+/* CONFIG_PM_POLICY_CUSTOM allows to define application specific power policy
  * checking whether the ticks is meeting the minimum criteria to enter
  * into SOC specific power policy or not
  */
-__WEAK struct pm_state_info *pm_policy_next_state(uint8_t id, int32_t ticks)
+struct pm_state_info *pm_policy_next_state(uint8_t cpu, int32_t ticks)
 {
 	int i;
 
@@ -295,3 +304,5 @@ __WEAK struct pm_state_info *pm_policy_next_state(uint8_t id, int32_t ticks)
 	return (struct pm_state_info *)(&pm_state_active);
 }
 #endif
+#endif
+

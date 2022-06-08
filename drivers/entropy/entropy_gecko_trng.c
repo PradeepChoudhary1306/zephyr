@@ -125,3 +125,4 @@ DEVICE_DT_INST_DEFINE(0,
 			NULL, NULL,
 			PRE_KERNEL_1, CONFIG_ENTROPY_INIT_PRIORITY,
 			&entropy_gecko_trng_api_funcs);
+			

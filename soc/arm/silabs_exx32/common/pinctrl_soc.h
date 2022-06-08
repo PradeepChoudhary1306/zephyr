@@ -89,4 +89,5 @@ typedef uint32_t pinctrl_soc_pin_t;
 }
 #endif
 
+
 #endif /* ZEPHYR_SOC_ARM_SILABS_GECKO_COMMON_PINCTRL_SOC_H_ */

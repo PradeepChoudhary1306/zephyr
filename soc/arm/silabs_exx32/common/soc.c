@@ -17,7 +17,7 @@
 #include <em_chip.h>
 #include <zephyr/arch/cpu.h>
 #include <zephyr/arch/arm/aarch32/cortex_m/cmsis.h>
-
+#include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
 
 #ifdef CONFIG_SOC_GECKO_DEV_INIT
@@ -173,8 +173,8 @@ static ALWAYS_INLINE void dcdc_init(void)
 #ifdef CONFIG_LOG_BACKEND_SWO
 static void swo_init(void)
 {
+#if 1
 	struct soc_gpio_pin pin_swo = PIN_SWO;
-
 #if defined(_SILICON_LABS_32B_SERIES_2)
 	GPIO->TRACEROUTEPEN = GPIO_TRACEROUTEPEN_SWVPEN;
 #else
@@ -193,6 +193,28 @@ static void swo_init(void)
 #endif /* _SILICON_LABS_32B_SERIES_2 */
 
 	soc_gpio_configure(&pin_swo);
+#endif
+#if 0
+	struct gpio_dt_spec pin_swo = GPIO_DT_SPEC_GET(DT_ALIAS(swolocation), gpios);
+#if defined(_SILICON_LABS_32B_SERIES_2)
+	GPIO->TRACEROUTEPEN = GPIO_TRACEROUTEPEN_SWVPEN;
+#else
+	/* Select HFCLK as the debug trace clock */
+	CMU->DBGCLKSEL = CMU_DBGCLKSEL_DBG_HFCLK;
+
+#if defined(_GPIO_ROUTEPEN_MASK)
+	/* Enable Serial wire output pin */
+	GPIO->ROUTEPEN |= GPIO_ROUTEPEN_SWVPEN;
+	/* Set SWO location */
+	GPIO->ROUTELOC0 =
+		SWO_LOCATION << _GPIO_ROUTELOC0_SWVLOC_SHIFT;
+#else
+	GPIO->ROUTE = GPIO_ROUTE_SWOPEN | (SWO_LOCATION << 8);
+#endif
+#endif /* _SILICON_LABS_32B_SERIES_2 */
+
+	GPIO_PinModeSet((GPIO_Port_TypeDef)(&pin_swo.port), (unsigned int)pin_swo.pin, gpioModePushPull, 1);
+#endif
 }
 #endif /* CONFIG_LOG_BACKEND_SWO */
 
@@ -273,5 +295,6 @@ void enableIRQ(void)
 }
 #endif
 #endif
+
 
 SYS_INIT(silabs_exx32_init, PRE_KERNEL_1, 0);

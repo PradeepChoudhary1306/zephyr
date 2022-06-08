@@ -5,14 +5,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr/zephyr.h>
-#include <zephyr/device.h>
-#include <zephyr/drivers/gpio.h>
-#include <zephyr/sys/util.h>
-#include <zephyr/sys/printk.h>
+#include <zephyr.h>
+#include <device.h>
+#include <drivers/gpio.h>
+#include <sys/util.h>
+#include <sys/printk.h>
 #include <inttypes.h>
+#include "sl_sleeptimer.h"
 
-#define SLEEP_TIME_MS	1
+#define SLEEP_TIME_MS	1000
 
 /*
  * Get button configuration from the devicetree sw0 alias. This is mandatory.
@@ -24,6 +25,7 @@
 static const struct gpio_dt_spec button = GPIO_DT_SPEC_GET_OR(SW0_NODE, gpios,
 							      {0});
 static struct gpio_callback button_cb_data;
+static uint8_t x = 0;
 
 /*
  * The led0 devicetree alias is optional. If present, we'll use it
@@ -36,12 +38,17 @@ void button_pressed(const struct device *dev, struct gpio_callback *cb,
 		    uint32_t pins)
 {
 	printk("Button pressed at %" PRIu32 "\n", k_cycle_get_32());
+	x = (x ^ 1);
+	gpio_pin_set_dt(&led, x);
 }
 
 void main(void)
 {
 	int ret;
+	uint32_t count1 = 0;
+	uint32_t count2 = 0;
 
+	sl_sleeptimer_init();
 	if (!device_is_ready(button.port)) {
 		printk("Error: button device %s is not ready\n",
 		       button.port->name);
@@ -86,13 +93,13 @@ void main(void)
 	printk("Press the button\n");
 	if (led.port) {
 		while (1) {
-			/* If we have an LED, match its state to the button's. */
-			int val = gpio_pin_get_dt(&button);
-
-			if (val >= 0) {
-				gpio_pin_set_dt(&led, val);
-			}
+			//x = (x ^ 1);
+			count1 = sl_sleeptimer_get_tick_count();
+			//gpio_pin_set_dt(&led, x);
+			//printk("%u\n", count1);
 			k_msleep(SLEEP_TIME_MS);
+			count2 = sl_sleeptimer_get_tick_count();
+			printk("%u\n", (count2 - count1));
 		}
 	}
 }

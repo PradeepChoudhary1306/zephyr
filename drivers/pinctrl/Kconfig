@@ -50,3 +50,4 @@ source "drivers/pinctrl/Kconfig.rv32m1"
 source "drivers/pinctrl/Kconfig.gecko"
 
 endif # PINCTRL
+

@@ -94,5 +94,6 @@ int pinctrl_configure_pins(const pinctrl_soc_pin_t *pins, uint8_t pin_cnt,
 #endif /* CONFIG_SOC_GECKO_HAS_INDIVIDUAL_PIN_LOCATION */
 			}
 #endif /* UART_GECKO_HW_FLOW_CONTROL */
+
 	return 0;
 }

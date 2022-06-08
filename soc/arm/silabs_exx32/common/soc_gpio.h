@@ -18,6 +18,9 @@
 extern "C" {
 #endif
 
+#define GECKO_GPIO_PIN_0	(0)
+#define GECKO_GPIO_PIN_1	(1)
+
 struct soc_gpio_pin {
 	GPIO_Port_TypeDef port; /** GPIO port */
 	unsigned int pin;       /** GPIO pin on the port */

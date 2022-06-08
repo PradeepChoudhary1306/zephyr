@@ -18,3 +18,4 @@ config SOC_FLASH_GECKO
 config SPI_GECKO
 	default y
 	depends on SPI
+	
