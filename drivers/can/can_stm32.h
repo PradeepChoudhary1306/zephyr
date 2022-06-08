@@ -8,11 +8,7 @@
 #ifndef ZEPHYR_DRIVERS_CAN_STM32_CAN_H_
 #define ZEPHYR_DRIVERS_CAN_STM32_CAN_H_
 
-#include <drivers/can.h>
-
-#define DEV_DATA(dev) ((struct can_stm32_data *const)(dev)->data)
-#define DEV_CFG(dev) \
-	((const struct can_stm32_config *const)(dev)->config)
+#include <zephyr/drivers/can.h>
 
 #define BIT_SEG_LENGTH(cfg) ((cfg)->prop_ts1 + (cfg)->ts2 + 1)
 
@@ -64,7 +60,9 @@ struct can_stm32_data {
 	uint64_t filter_usage;
 	can_rx_callback_t rx_cb[CONFIG_CAN_MAX_FILTER];
 	void *cb_arg[CONFIG_CAN_MAX_FILTER];
-	can_state_change_isr_t state_change_isr;
+	can_state_change_callback_t state_change_cb;
+	void *state_change_cb_data;
+	enum can_state state;
 };
 
 struct can_stm32_config {
@@ -75,9 +73,12 @@ struct can_stm32_config {
 	uint8_t sjw;
 	uint8_t prop_ts1;
 	uint8_t ts2;
+	bool one_shot;
 	struct stm32_pclken pclken;
 	void (*config_irq)(CAN_TypeDef *can);
 	const struct pinctrl_dev_config *pcfg;
+	const struct device *phy;
+	uint32_t max_bitrate;
 };
 
 #endif /*ZEPHYR_DRIVERS_CAN_STM32_CAN_H_*/

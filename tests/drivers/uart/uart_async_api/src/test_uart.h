@@ -14,7 +14,7 @@
 #ifndef __TEST_UART_H__
 #define __TEST_UART_H__
 
-#include <drivers/uart.h>
+#include <zephyr/drivers/uart.h>
 #include <ztest.h>
 
 /* RX and TX pins have to be connected together*/
@@ -35,6 +35,7 @@
 	defined(CONFIG_BOARD_NUCLEO_WL55JC)
 #define UART_DEVICE_NAME DT_LABEL(DT_NODELABEL(usart1))
 #elif defined(CONFIG_BOARD_NUCLEO_H723ZG) || \
+	defined(CONFIG_BOARD_NUCLEO_H743ZI) || \
 	defined(CONFIG_BOARD_STM32F3_DISCO)
 #define UART_DEVICE_NAME DT_LABEL(DT_NODELABEL(usart2))
 #elif defined(CONFIG_BOARD_NUCLEO_L4R5ZI) || \
@@ -47,6 +48,23 @@
 #elif defined(CONFIG_BOARD_NUCLEO_F429ZI) || \
 	defined(CONFIG_BOARD_NUCLEO_F207ZG)
 #define UART_DEVICE_NAME DT_LABEL(DT_NODELABEL(usart6))
+#elif defined(CONFIG_BOARD_FRDM_K82F)
+#define UART_DEVICE_NAME DT_LABEL(DT_NODELABEL(lpuart0))
+#elif defined(CONFIG_BOARD_MIMXRT1020_EVK) || \
+	defined(CONFIG_BOARD_MIMXRT1024_EVK) || \
+	defined(CONFIG_BOARD_MIMXRT1160_EVK_CM4) || \
+	defined(CONFIG_BOARD_MIMXRT1170_EVK_CM4) || \
+	defined(CONFIG_BOARD_MIMXRT1160_EVK_CM7) || \
+	defined(CONFIG_BOARD_MIMXRT1170_EVK_CM7) || \
+	defined(CONFIG_BOARD_TWR_KE18F)
+#define UART_DEVICE_NAME DT_LABEL(DT_NODELABEL(lpuart2))
+#elif defined(CONFIG_BOARD_MIMXRT1050_EVK) || \
+	defined(CONFIG_BOARD_MIMXRT1060_EVK) || \
+	defined(CONFIG_BOARD_MIMXRT1064_EVK)
+#define UART_DEVICE_NAME DT_LABEL(DT_NODELABEL(lpuart3))
+#elif defined(CONFIG_BOARD_MIMXRT1010_EVK) || \
+	defined(CONFIG_BOARD_MIMXRT1015_EVK)
+#define UART_DEVICE_NAME DT_LABEL(DT_NODELABEL(lpuart4))
 #else
 #define UART_DEVICE_NAME DT_LABEL(DT_CHOSEN(zephyr_console))
 #endif
@@ -54,6 +72,7 @@
 void init_test(void);
 
 void test_single_read(void);
+void test_multiple_rx_enable(void);
 void test_chained_read(void);
 void test_double_buffer(void);
 void test_read_abort(void);
@@ -63,6 +82,7 @@ void test_long_buffers(void);
 void test_chained_write(void);
 
 void test_single_read_setup(void);
+void test_multiple_rx_enable_setup(void);
 void test_chained_read_setup(void);
 void test_double_buffer_setup(void);
 void test_read_abort_setup(void);

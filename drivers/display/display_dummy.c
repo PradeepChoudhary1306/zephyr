@@ -8,8 +8,8 @@
 #define DT_DRV_COMPAT zephyr_dummy_dc
 
 #include <string.h>
-#include <drivers/display.h>
-#include <device.h>
+#include <zephyr/drivers/display.h>
+#include <zephyr/device.h>
 
 struct dummy_display_config {
 	uint16_t height;
@@ -22,8 +22,7 @@ struct dummy_display_data {
 
 static int dummy_display_init(const struct device *dev)
 {
-	struct dummy_display_data *disp_data =
-	    (struct dummy_display_data *)dev->data;
+	struct dummy_display_data *disp_data = dev->data;
 
 	disp_data->current_pixel_format = PIXEL_FORMAT_ARGB_8888;
 

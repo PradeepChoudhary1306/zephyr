@@ -6,8 +6,8 @@
 #ifndef ZEPHYR_TRACE_SYSVIEW_H
 #define ZEPHYR_TRACE_SYSVIEW_H
 #include <string.h>
-#include <kernel.h>
-#include <init.h>
+#include <zephyr/kernel.h>
+#include <zephyr/init.h>
 #include <tracing_sysview_ids.h>
 
 #include <SEGGER_SYSVIEW.h>
@@ -520,6 +520,10 @@ void sys_trace_thread_info(struct k_thread *thread);
 #define sys_port_trace_k_pipe_cleanup_exit(pipe, ret)
 #define sys_port_trace_k_pipe_alloc_init_enter(pipe)
 #define sys_port_trace_k_pipe_alloc_init_exit(pipe, ret)
+#define sys_port_trace_k_pipe_flush_enter(pipe)
+#define sys_port_trace_k_pipe_flush_exit(pipe)
+#define sys_port_trace_k_pipe_buffer_flush_enter(pipe)
+#define sys_port_trace_k_pipe_buffer_flush_exit(pipe)
 #define sys_port_trace_k_pipe_put_enter(pipe, timeout)
 #define sys_port_trace_k_pipe_put_blocking(pipe, timeout)
 #define sys_port_trace_k_pipe_put_exit(pipe, timeout, ret)

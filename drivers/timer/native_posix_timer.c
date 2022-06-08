@@ -13,11 +13,11 @@
 #include "zephyr/types.h"
 #include "irq.h"
 #include "device.h"
-#include <drivers/timer/system_timer.h>
+#include <zephyr/drivers/timer/system_timer.h>
 #include "sys_clock.h"
 #include "timer_model.h"
 #include "soc.h"
-#include <arch/posix/posix_trace.h>
+#include <zephyr/arch/posix/posix_trace.h>
 
 static uint64_t tick_period; /* System tick period in microseconds */
 /* Time (microseconds since boot) of the last timer tick interrupt */
@@ -108,12 +108,9 @@ uint32_t sys_clock_elapsed(void)
 }
 
 /**
- *
  * @brief Stop announcing sys ticks into the kernel
  *
  * Disable the system ticks generation
- *
- * @return N/A
  */
 void sys_clock_disable(void)
 {
@@ -121,7 +118,7 @@ void sys_clock_disable(void)
 	hwtimer_set_silent_ticks(INT64_MAX);
 }
 
-/*
+/**
  * @brief Initialize system timer driver
  *
  * Enable the hw timer, setting its tick period, and setup its interrupt

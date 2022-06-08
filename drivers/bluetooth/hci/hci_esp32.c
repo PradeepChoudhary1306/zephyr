@@ -8,10 +8,10 @@
 #define LOG_MODULE_NAME bt_hci_driver_esp32
 #include "common/log.h"
 
-#include <init.h>
-#include <sys/byteorder.h>
+#include <zephyr/init.h>
+#include <zephyr/sys/byteorder.h>
 
-#include <drivers/bluetooth/hci_driver.h>
+#include <zephyr/drivers/bluetooth/hci_driver.h>
 
 #include <esp_bt.h>
 
@@ -40,8 +40,6 @@ static bool is_hci_event_discardable(const uint8_t *evt_data)
 
 		switch (subevt_type) {
 		case BT_HCI_EVT_LE_ADVERTISING_REPORT:
-			return true;
-		case BT_HCI_EVT_LE_EXT_ADVERTISING_REPORT:
 			return true;
 		default:
 			return false;

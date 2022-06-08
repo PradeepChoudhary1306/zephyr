@@ -5,11 +5,11 @@
  */
 
 #include <stddef.h>
-#include <zephyr.h>
+#include <zephyr/zephyr.h>
 #include <soc.h>
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/hci.h>
-#include <sys/byteorder.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/hci.h>
+#include <zephyr/sys/byteorder.h>
 
 #include "hal/cpu.h"
 #include "hal/ecb.h"
@@ -41,6 +41,11 @@
 #include "ull_iso_types.h"
 #include "ull_conn_types.h"
 #include "ull_conn_iso_types.h"
+
+#if defined(CONFIG_BT_CTLR_USER_EXT)
+#include "ull_vendor.h"
+#endif /* CONFIG_BT_CTLR_USER_EXT */
+
 #include "ull_internal.h"
 #include "ull_sched_internal.h"
 #include "ull_chan_internal.h"
@@ -52,9 +57,6 @@
 #include "ull_conn_iso_internal.h"
 #include "ull_peripheral_iso_internal.h"
 
-#if defined(CONFIG_BT_CTLR_USER_EXT)
-#include "ull_vendor.h"
-#endif /* CONFIG_BT_CTLR_USER_EXT */
 
 #include "ll.h"
 #include "ll_feat.h"
@@ -70,19 +72,10 @@
 #include "common/log.h"
 #include "hal/debug.h"
 
-/**
- *  User CPR Interval
- */
-#if !defined(CONFIG_BT_CTLR_USER_CPR_INTERVAL_MIN)
-/* Bluetooth defined CPR Interval Minimum (7.5ms) */
-#define CONN_INTERVAL_MIN(x) (6)
-#else /* CONFIG_BT_CTLR_USER_CPR_INTERVAL_MIN */
-/* Proprietary user defined CPR Interval Minimum */
-extern uint16_t ull_conn_interval_min_get(struct ll_conn *conn);
-#define CONN_INTERVAL_MIN(x) (MAX(ull_conn_interval_min_get(x), 1))
-#endif /* CONFIG_BT_CTLR_USER_CPR_INTERVAL_MIN */
-
 static int init_reset(void);
+#if !defined(CONFIG_BT_CTLR_LOW_LAT_ULL)
+static void tx_demux_sched(struct ll_conn *conn);
+#endif /* CONFIG_BT_CTLR_LOW_LAT_ULL */
 static void tx_demux(void *param);
 static struct node_tx *tx_ull_dequeue(struct ll_conn *conn, struct node_tx *tx);
 
@@ -103,6 +96,14 @@ static void tx_lll_flush(void *param);
 #if defined(CONFIG_BT_CTLR_LLID_DATA_START_EMPTY)
 static int empty_data_start_release(struct ll_conn *conn, struct node_tx *tx);
 #endif /* CONFIG_BT_CTLR_LLID_DATA_START_EMPTY */
+
+#if defined(CONFIG_BT_CTLR_CONN_PARAM_REQ)
+/* Connection context pointer used as CPR mutex to serialize connection
+ * parameter requests procedures across simulataneous connections so that
+ * offsets exchanged to the peer do not get changed.
+ */
+struct ll_conn *conn_upd_curr;
+#endif /* defined(CONFIG_BT_CTLR_CONN_PARAM_REQ) */
 
 #if defined(CONFIG_BT_LL_SW_LLCP_LEGACY)
 static inline void ctrl_tx_enqueue(struct ll_conn *conn, struct node_tx *tx);
@@ -126,14 +127,6 @@ static inline bool ctrl_is_unexpected(struct ll_conn *conn, uint8_t opcode);
 #endif /* CONFIG_BT_CTLR_LE_ENC */
 
 #if defined(CONFIG_BT_CTLR_CONN_PARAM_REQ)
-/* NOTE: cpr_active_* functions are inline as they are simple assignment to
- *       global variable, and if in future get called from more than two caller
- *       functions, we dont want the caller function branching into these which
- *       can add to CPU use inside ULL ISR.
- */
-static inline void cpr_active_check_and_reset(struct ll_conn *conn);
-static inline void cpr_active_reset(void);
-
 static inline void event_conn_param_prep(struct ll_conn *conn,
 					 uint16_t event_counter,
 					 uint32_t ticks_at_expire);
@@ -154,7 +147,8 @@ static inline void event_phy_upd_ind_prep(struct ll_conn *conn,
 #endif /* CONFIG_BT_CTLR_PHY */
 
 #if defined(CONFIG_BT_CTLR_PERIPHERAL_ISO)
-static inline void event_send_cis_rsp(struct ll_conn *conn);
+static inline void event_send_cis_rsp(struct ll_conn *conn,
+				      uint16_t event_counter);
 static inline void event_peripheral_iso_prep(struct ll_conn *conn,
 					     uint16_t event_counter,
 					     uint32_t ticks_at_expire);
@@ -308,10 +302,8 @@ int ll_tx_mem_enqueue(uint16_t handle, void *tx)
 
 	MFIFO_ENQUEUE(conn_tx, idx);
 
+#if !defined(CONFIG_BT_CTLR_LOW_LAT_ULL)
 	if (ull_ref_get(&conn->ull)) {
-		static memq_link_t link;
-		static struct mayfly mfy = {0, 0, &link, NULL, tx_demux};
-
 #if defined(CONFIG_BT_CTLR_FORCE_MD_AUTO)
 		if (tx_cnt >= CONFIG_BT_BUF_ACL_TX_COUNT) {
 			uint8_t previous, force_md_cnt;
@@ -325,16 +317,14 @@ int ll_tx_mem_enqueue(uint16_t handle, void *tx)
 		}
 #endif /* CONFIG_BT_CTLR_FORCE_MD_AUTO */
 
-		mfy.param = conn;
-
-		mayfly_enqueue(TICKER_USER_ID_THREAD, TICKER_USER_ID_ULL_HIGH,
-			       0, &mfy);
+		tx_demux_sched(conn);
 
 #if defined(CONFIG_BT_CTLR_FORCE_MD_AUTO)
 	} else {
 		lll_conn_force_md_cnt_set(0U);
 #endif /* CONFIG_BT_CTLR_FORCE_MD_AUTO */
 	}
+#endif /* !CONFIG_BT_CTLR_LOW_LAT_ULL */
 
 	if (IS_ENABLED(CONFIG_BT_PERIPHERAL) && conn->lll.role) {
 		ull_periph_latency_cancel(conn, handle);
@@ -508,7 +498,7 @@ uint8_t ll_chm_get(uint16_t handle, uint8_t *chm)
 	 * for the specified Connection_Handle. The returned value indicates the state of
 	 * the Channel_Map specified by the last transmitted or received Channel_Map
 	 * (in a CONNECT_IND or LL_CHANNEL_MAP_IND message) for the specified
-	 * Connection_Handle, regardless of whether the Master has received an
+	 * Connection_Handle, regardless of whether the Central has received an
 	 * acknowledgment
 	 */
 	const uint8_t *pending_chm;
@@ -544,7 +534,12 @@ uint8_t ll_terminate_ind_send(uint16_t handle, uint8_t reason)
 {
 	struct ll_conn *conn;
 
+	if (!IS_ACL_HANDLE(handle)) {
+		return BT_HCI_ERR_UNKNOWN_CONN_ID;
+	}
+
 	conn = ll_connected_get(handle);
+
 	if (!conn) {
 		return BT_HCI_ERR_UNKNOWN_CONN_ID;
 	}
@@ -574,7 +569,6 @@ uint8_t ll_terminate_ind_send(uint16_t handle, uint8_t reason)
 	if (IS_ENABLED(CONFIG_BT_PERIPHERAL) && conn->lll.role) {
 		ull_periph_latency_cancel(conn, handle);
 	}
-
 	return 0;
 }
 
@@ -914,13 +908,6 @@ int ull_conn_reset(void)
 	/* Re-initialize the Tx Ack mfifo */
 	MFIFO_INIT(conn_ack);
 
-#if defined(CONFIG_BT_LL_SW_LLCP_LEGACY)
-#if defined(CONFIG_BT_CTLR_CONN_PARAM_REQ)
-	/* Reset CPR mutex */
-	cpr_active_reset();
-#endif /* CONFIG_BT_CTLR_CONN_PARAM_REQ */
-#endif /* CONFIG_BT_LL_SW_LLCP_LEGACY */
-
 	err = init_reset();
 	if (err) {
 		return err;
@@ -1153,18 +1140,18 @@ int ull_conn_llcp(struct ll_conn *conn, uint32_t ticks_at_expire, uint16_t lazy)
 
 #if defined(CONFIG_BT_CTLR_PERIPHERAL_ISO)
 		} else if (conn->llcp_cis.req != conn->llcp_cis.ack) {
+			struct lll_conn *lll = &conn->lll;
+			uint16_t event_counter;
+
+			/* Calculate current event counter */
+			event_counter = lll->event_counter +
+					lll->latency_prepare + lazy;
+
 			if (conn->llcp_cis.state == LLCP_CIS_STATE_RSP_WAIT) {
 				/* Handle CIS response */
-				event_send_cis_rsp(conn);
+				event_send_cis_rsp(conn, event_counter);
 			} else if (conn->llcp_cis.state ==
 						LLCP_CIS_STATE_INST_WAIT) {
-				struct lll_conn *lll = &conn->lll;
-				uint16_t event_counter;
-
-				/* Calculate current event counter */
-				event_counter = lll->event_counter +
-						lll->latency_prepare + lazy;
-
 				/* Start CIS peripheral */
 				event_peripheral_iso_prep(conn,
 							  event_counter,
@@ -1400,7 +1387,7 @@ void ull_conn_done(struct node_rx_event_done *done)
 #if defined(CONFIG_BT_LL_SW_LLCP_LEGACY)
 		if (lll->enc_rx || conn->llcp_enc.pause_rx) {
 #else /* CONFIG_BT_LL_SW_LLCP_LEGACY */
-		if (lll->enc_rx || ull_cp_encryption_paused(conn)) {
+		if (lll->enc_rx && lll->enc_tx) {
 #endif /* CONFIG_BT_LL_SW_LLCP_LEGACY */
 			uint16_t appto_reload_new;
 
@@ -1594,6 +1581,7 @@ void ull_conn_done(struct node_rx_event_done *done)
 	}
 
 	/* check procedure timeout */
+#if defined(CONFIG_BT_LL_SW_LLCP_LEGACY)
 	if (conn->procedure_expire != 0U) {
 		if (conn->procedure_expire > elapsed_event) {
 			conn->procedure_expire -= elapsed_event;
@@ -1603,6 +1591,13 @@ void ull_conn_done(struct node_rx_event_done *done)
 			return;
 		}
 	}
+#else /* CONFIG_BT_LL_SW_LLCP_LEGACY */
+	if (-ETIMEDOUT == ull_cp_prt_elapse(conn, elapsed_event)) {
+		conn_cleanup(conn, BT_HCI_ERR_LL_RESP_TIMEOUT);
+
+		return;
+	}
+#endif /* CONFIG_BT_LL_SW_LLCP_LEGACY */
 
 #if defined(CONFIG_BT_CTLR_LE_PING)
 	/* check apto */
@@ -1648,6 +1643,34 @@ void ull_conn_done(struct node_rx_event_done *done)
 		}
 	}
 #endif /* CONFIG_BT_CTLR_LE_PING */
+
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_REQ)
+	/* Check if the CTE_REQ procedure is periodic and counter has been started.
+	 * req_expire is set when: new CTE_REQ is started, after completion of last periodic run.
+	 */
+	if (conn->llcp.cte_req.req_interval != 0U && conn->llcp.cte_req.req_expire != 0U) {
+		if (conn->llcp.cte_req.req_expire > elapsed_event) {
+			conn->llcp.cte_req.req_expire -= elapsed_event;
+		} else {
+			uint8_t err;
+
+			/* Set req_expire to zero to mark that new periodic CTE_REQ was started.
+			 * The counter is re-started after completion of this run.
+			 */
+			conn->llcp.cte_req.req_expire = 0U;
+
+			err = ull_cp_cte_req(conn, conn->llcp.cte_req.min_cte_len,
+					     conn->llcp.cte_req.cte_type);
+
+			if (err == BT_HCI_ERR_CMD_DISALLOWED) {
+				/* Conditions has changed e.g. PHY was changed to CODED.
+				 * New CTE REQ is not possible. Disable the periodic requests.
+				 */
+				ull_cp_cte_req_set_disable(conn);
+			}
+		}
+	}
+#endif /* CONFIG_BT_CTLR_DF_CONN_CTE_REQ */
 
 #if defined(CONFIG_BT_CTLR_CONN_RSSI_EVENT)
 	/* generate RSSI event */
@@ -1716,6 +1739,18 @@ void ull_conn_done(struct node_rx_event_done *done)
 			  ((void *)conn == ull_disable_mark_get()));
 	}
 }
+
+#if defined(CONFIG_BT_CTLR_LOW_LAT_ULL)
+void ull_conn_lll_tx_demux_sched(struct lll_conn *lll)
+{
+	static memq_link_t link;
+	static struct mayfly mfy = {0U, 0U, &link, NULL, tx_demux};
+
+	mfy.param = HDR_LLL2ULL(lll);
+
+	mayfly_enqueue(TICKER_USER_ID_LLL, TICKER_USER_ID_ULL_HIGH, 1U, &mfy);
+}
+#endif /* CONFIG_BT_CTLR_LOW_LAT_ULL */
 
 void ull_conn_tx_demux(uint8_t count)
 {
@@ -2053,19 +2088,14 @@ uint16_t ull_conn_lll_max_tx_octets_get(struct lll_conn *lll)
 /**
  * @brief Initialize pdu_data members that are read only in lower link layer.
  *
- * @param pdu_tx Pointer to pdu_data object to be initialized
+ * @param pdu Pointer to pdu_data object to be initialized
  */
-void ull_pdu_data_init(struct pdu_data *pdu_tx)
+void ull_pdu_data_init(struct pdu_data *pdu)
 {
-	LL_ASSERT(pdu_tx);
-
-	pdu_tx->cp = false;
-	pdu_tx->rfu = 0U;
-#if !defined(CONFIG_SOC_OPENISA_RV32M1_RISCV32)
-#if !defined(CONFIG_BT_CTLR_DATA_LENGTH_CLEAR)
-	pdu_tx->resv = 0U;
-#endif /* CONFIG_BT_CTLR_DATA_LENGTH_CLEAR */
-#endif /* !CONFIG_SOC_OPENISA_RV32M1_RISCV32 */
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_TX) || defined(CONFIG_BT_CTLR_DF_CONN_CTE_RX)
+	pdu->cp = 0U;
+	pdu->resv = 0U;
+#endif /* CONFIG_BT_CTLR_DF_CONN_CTE_TX || CONFIG_BT_CTLR_DF_CONN_CTE_RX */
 }
 
 static int init_reset(void)
@@ -2092,6 +2122,11 @@ static int init_reset(void)
 	ull_cp_init();
 #endif /* CONFIG_BT_LL_SW_LLCP_LEGACY */
 
+#if defined(CONFIG_BT_CTLR_CONN_PARAM_REQ)
+	/* Reset CPR mutex */
+	cpr_active_reset();
+#endif /* CONFIG_BT_CTLR_CONN_PARAM_REQ */
+
 #if defined(CONFIG_BT_CTLR_DATA_LENGTH)
 	/* Initialize the DLE defaults */
 	default_tx_octets = PDU_DC_PAYLOAD_SIZE_MIN;
@@ -2116,6 +2151,18 @@ static int init_reset(void)
 
 	return 0;
 }
+
+#if !defined(CONFIG_BT_CTLR_LOW_LAT_ULL)
+static void tx_demux_sched(struct ll_conn *conn)
+{
+	static memq_link_t link;
+	static struct mayfly mfy = {0U, 0U, &link, NULL, tx_demux};
+
+	mfy.param = conn;
+
+	mayfly_enqueue(TICKER_USER_ID_THREAD, TICKER_USER_ID_ULL_HIGH, 0U, &mfy);
+}
+#endif /* !CONFIG_BT_CTLR_LOW_LAT_ULL */
 
 static void tx_demux(void *param)
 {
@@ -2222,6 +2269,15 @@ static void conn_setup_adv_scan_disabled_cb(void *param)
 	ftr = &(rx->rx_ftr);
 	lll = *((struct lll_conn **)((uint8_t *)ftr->param +
 				     sizeof(struct lll_hdr)));
+
+	if (IS_ENABLED(CONFIG_BT_CTLR_JIT_SCHEDULING)) {
+		struct ull_hdr *hdr;
+
+		/* Prevent fast ADV re-scheduling from re-triggering */
+		hdr = HDR_LLL2ULL(ftr->param);
+		hdr->disabled_cb = NULL;
+	}
+
 	switch (lll->role) {
 #if defined(CONFIG_BT_CENTRAL)
 	case 0:
@@ -2303,6 +2359,7 @@ static void conn_cleanup_finalize(struct ll_conn *conn)
 	}
 #else /* CONFIG_BT_LL_SW_LLCP_LEGACY */
 	ARG_UNUSED(rx);
+	ull_cp_state_set(conn, ULL_CP_DISCONNECTED);
 #endif /* CONFIG_BT_LL_SW_LLCP_LEGACY */
 
 	/* flush demux-ed Tx buffer still in ULL context */
@@ -2807,42 +2864,6 @@ static bool is_enc_req_pause_tx(struct ll_conn *conn)
 }
 #endif /* CONFIG_BT_CTLR_LE_ENC */
 
-#if defined(CONFIG_BT_CTLR_CONN_PARAM_REQ)
-/* Connection context pointer used as CPR mutex to serialize connection
- * parameter requests procedures across simulataneous connections so that
- * offsets exchanged to the peer do not get changed.
- */
-static struct ll_conn *conn_upd_curr;
-
-static inline void cpr_active_check_and_set(struct ll_conn *conn)
-{
-	if (!conn_upd_curr) {
-		conn_upd_curr = conn;
-	}
-}
-
-static inline void cpr_active_set(struct ll_conn *conn)
-{
-	conn_upd_curr = conn;
-}
-
-static inline bool cpr_active_is_set(struct ll_conn *conn)
-{
-	return conn_upd_curr && (conn_upd_curr != conn);
-}
-
-static inline void cpr_active_check_and_reset(struct ll_conn *conn)
-{
-	if (conn == conn_upd_curr) {
-		conn_upd_curr = NULL;
-	}
-}
-
-static inline void cpr_active_reset(void)
-{
-	conn_upd_curr = NULL;
-}
-#endif /* CONFIG_BT_CTLR_CONN_PARAM_REQ */
 
 static inline void event_conn_upd_init(struct ll_conn *conn,
 				       uint16_t event_counter,
@@ -6057,30 +6078,56 @@ static inline uint8_t phy_upd_ind_recv(struct ll_conn *conn, memq_link_t *link,
 #endif /* CONFIG_BT_CTLR_PHY */
 
 #if defined(CONFIG_BT_CTLR_PERIPHERAL_ISO)
-void event_send_cis_rsp(struct ll_conn *conn)
+void event_send_cis_rsp(struct ll_conn *conn, uint16_t event_counter)
 {
 	struct node_tx *tx;
 
 	/* If waiting for accept/reject from host, do nothing */
-	if (((conn->llcp_cis.req - conn->llcp_cis.ack) & 0xFF) == CIS_REQUEST_AWAIT_HOST) {
+	if (((conn->llcp_cis.req - conn->llcp_cis.ack) & 0xFF) ==
+		CIS_REQUEST_AWAIT_HOST) {
 		return;
 	}
 
 	tx = mem_acquire(&mem_conn_tx_ctrl.free);
 	if (tx) {
 		struct pdu_data *pdu = (void *)tx->pdu;
+		uint16_t conn_event_count;
 
 		ull_pdu_data_init(pdu);
 
 		pdu->ll_id = PDU_DATA_LLID_CTRL;
 		pdu->llctrl.opcode = PDU_DATA_LLCTRL_TYPE_CIS_RSP;
 
+		/* Try to request extra time to setup the CIS. If central's
+		 * CIS_IND is delayed, or it decides to do differently, this
+		 * still might not be possible. Only applies if instance is
+		 * less than two events in the future.
+		 *
+		 * In the example below it is shown how the CIS_IND is adjusted
+		 * by peripheral increasing the event_counter in the CIS_RSP.
+		 * This improves the peripheral's chances of setting up the CIS
+		 * in due time. Current event counter is left most column.
+		 *
+		 * Without correction (LATE)     With correction (OK)
+		 * --------------------------------------------------------
+		 * 10 ==> CIS_REQ E=15           10 ==> CIS_REQ E=15
+		 * 14 <== CIS_RSP E=15           14 <== CIS_RSP E=16 (14+2)
+		 * 15 ==> CIS_IND E=16           15 ==> CIS_IND E=17
+		 * 16 ==> (+ offset) First PDU   16     Peripheral setup
+		 * 16     Peripheral setup       17 ==> (+ offset) First PDU
+		 * 17     Peripheral ready
+		 *
+		 * TODO: Port to new LLCP procedures
+		 */
+		conn_event_count = MAX(conn->llcp_cis.conn_event_count,
+				       event_counter + 2);
+
 		sys_put_le24(conn->llcp_cis.cis_offset_min,
 			     pdu->llctrl.cis_rsp.cis_offset_min);
 		sys_put_le24(conn->llcp_cis.cis_offset_max,
 			     pdu->llctrl.cis_rsp.cis_offset_max);
 		pdu->llctrl.cis_rsp.conn_event_count =
-			sys_cpu_to_le16(conn->llcp_cis.conn_event_count);
+			sys_cpu_to_le16(conn_event_count);
 
 		pdu->len = offsetof(struct pdu_data_llctrl, cis_rsp) +
 				    sizeof(struct pdu_data_llctrl_cis_rsp);
@@ -6094,8 +6141,26 @@ void event_send_cis_rsp(struct ll_conn *conn)
 void event_peripheral_iso_prep(struct ll_conn *conn, uint16_t event_counter,
 			       uint32_t ticks_at_expire)
 {
-	if (event_counter == conn->llcp_cis.conn_event_count) {
-		ull_peripheral_iso_start(conn, ticks_at_expire);
+	struct ll_conn_iso_group *cig;
+	uint16_t start_event_count;
+
+	start_event_count = conn->llcp_cis.conn_event_count;
+
+	cig = ll_conn_iso_group_get_by_id(conn->llcp_cis.cig_id);
+	LL_ASSERT(cig);
+
+	if (!cig->started) {
+		/* Start ISO peripheral one event before the requested instant
+		 * for first CIS. This is done to be able to accept small CIS
+		 * offsets.
+		 */
+		start_event_count--;
+	}
+
+	/* Start ISO peripheral one event before the requested instant */
+	if (event_counter == start_event_count) {
+		/* Start CIS peripheral */
+		ull_peripheral_iso_start(conn, ticks_at_expire, conn->llcp_cis.cis_handle);
 
 		conn->llcp_cis.state = LLCP_CIS_STATE_REQ;
 		conn->llcp_cis.ack = conn->llcp_cis.req;
@@ -6112,17 +6177,17 @@ static uint8_t cis_req_recv(struct ll_conn *conn, memq_link_t *link,
 	void *node;
 
 	conn->llcp_cis.cig_id = req->cig_id;
-	conn->llcp_cis.framed = req->framed;
-	conn->llcp_cis.c_max_sdu = sys_le16_to_cpu(req->c_max_sdu);
-	conn->llcp_cis.p_max_sdu = sys_le16_to_cpu(req->p_max_sdu);
+	conn->llcp_cis.c_max_sdu = (uint16_t)(req->c_max_sdu_packed[1] & 0x0F) << 8 |
+					      req->c_max_sdu_packed[0];
+	conn->llcp_cis.p_max_sdu = (uint16_t)(req->p_max_sdu[1] & 0x0F) << 8 | req->p_max_sdu[0];
 	conn->llcp_cis.cis_offset_min = sys_get_le24(req->cis_offset_min);
 	conn->llcp_cis.cis_offset_max = sys_get_le24(req->cis_offset_max);
-	conn->llcp_cis.conn_event_count =
-		sys_le16_to_cpu(req->conn_event_count);
+	conn->llcp_cis.conn_event_count = sys_le16_to_cpu(req->conn_event_count);
 
 	/* Acquire resources for new CIS */
 	err = ull_peripheral_iso_acquire(conn, &pdu->llctrl.cis_req, &cis_handle);
 	if (err) {
+		(*rx)->hdr.type = NODE_RX_TYPE_RELEASE;
 		return err;
 	}
 
@@ -6141,7 +6206,7 @@ static uint8_t cis_req_recv(struct ll_conn *conn, memq_link_t *link,
 	conn_iso_req = node;
 	conn_iso_req->cig_id = req->cig_id;
 	conn_iso_req->cis_id = req->cis_id;
-	conn_iso_req->cis_handle = sys_le16_to_cpu(cis_handle);
+	conn_iso_req->cis_handle = cis_handle;
 
 	return 0;
 }
@@ -7467,7 +7532,13 @@ static inline int ctrl_rx(memq_link_t *link, struct node_rx_pdu **rx,
 
 		err = cis_req_recv(conn, link, rx, pdu_rx);
 		if (err) {
-			conn->llcp_terminate.reason_final = err;
+			if (err == BT_HCI_ERR_INVALID_LL_PARAM) {
+				nack = reject_ext_ind_send(conn, *rx,
+						PDU_DATA_LLCTRL_TYPE_CIS_REQ,
+						BT_HCI_ERR_UNSUPP_LL_PARAM_VAL);
+			} else {
+				conn->llcp_terminate.reason_final = err;
+			}
 		}
 		break;
 	}
@@ -7569,21 +7640,6 @@ void ull_conn_resume_rx_data(struct ll_conn *conn)
 }
 #endif /* CONFIG_BT_CTLR_LE_ENC */
 
-/**
- * @brief Restart procedure timeout 'timer'
- */
-void ull_conn_prt_reload(struct ll_conn *conn, uint16_t procedure_reload)
-{
-	conn->procedure_expire = procedure_reload;
-}
-
-/**
- * @brief Clear procedure timeout 'timer'
- */
-void ull_conn_prt_clear(struct ll_conn *conn)
-{
-	conn->procedure_expire = 0U;
-}
 uint16_t ull_conn_event_counter(struct ll_conn *conn)
 {
 	struct lll_conn *lll;
@@ -7624,12 +7680,6 @@ void ull_conn_update_parameters(struct ll_conn *conn, uint8_t is_cu_proc, uint8_
 
 	instant_latency = (event_counter - instant) & 0xFFFF;
 
-#if defined(CONFIG_BT_CTLR_CONN_PARAM_REQ)
-	if (!is_cu_proc) {
-		/* Stop procedure timeout */
-		conn->procedure_expire = 0U;
-	}
-#endif /* CONFIG_BT_CTLR_CONN_PARAM_REQ */
 
 	ticks_at_expire = conn->llcp.prep.ticks_at_expire;
 
@@ -7723,7 +7773,7 @@ void ull_conn_update_parameters(struct ll_conn *conn, uint8_t is_cu_proc, uint8_
 	lll->latency = latency;
 
 	conn->supervision_reload = RADIO_CONN_EVENTS((timeout * 10U * 1000U), conn_interval_us);
-	conn->procedure_reload = RADIO_CONN_EVENTS((40U * 1000U * 1000U), conn_interval_us);
+	ull_cp_prt_reload_set(conn, conn_interval_us);
 
 #if defined(CONFIG_BT_CTLR_LE_PING)
 	/* APTO in no. of connection events */
@@ -7845,14 +7895,24 @@ uint8_t ull_dle_update_eff(struct ll_conn *conn)
 	uint8_t dle_changed = 0;
 
 	const uint16_t eff_tx_octets =
-		MIN(conn->lll.dle.local.max_tx_octets, conn->lll.dle.remote.max_rx_octets);
+		MAX(MIN(conn->lll.dle.local.max_tx_octets, conn->lll.dle.remote.max_rx_octets),
+		    PDU_DC_PAYLOAD_SIZE_MIN);
 	const uint16_t eff_rx_octets =
-		MIN(conn->lll.dle.local.max_rx_octets, conn->lll.dle.remote.max_tx_octets);
+		MAX(MIN(conn->lll.dle.local.max_rx_octets, conn->lll.dle.remote.max_tx_octets),
+		    PDU_DC_PAYLOAD_SIZE_MIN);
+
 #if defined(CONFIG_BT_CTLR_PHY)
+	unsigned int min_eff_tx_time = (conn->lll.phy_tx == PHY_CODED) ?
+			PDU_DC_PAYLOAD_TIME_MIN_CODED : PDU_DC_PAYLOAD_TIME_MIN;
+	unsigned int min_eff_rx_time = (conn->lll.phy_rx == PHY_CODED) ?
+			PDU_DC_PAYLOAD_TIME_MIN_CODED : PDU_DC_PAYLOAD_TIME_MIN;
+
 	const uint16_t eff_tx_time =
-		MIN(conn->lll.dle.local.max_tx_time, conn->lll.dle.remote.max_rx_time);
+		MAX(MIN(conn->lll.dle.local.max_tx_time, conn->lll.dle.remote.max_rx_time),
+		    min_eff_tx_time);
 	const uint16_t eff_rx_time =
-		MIN(conn->lll.dle.local.max_rx_time, conn->lll.dle.remote.max_tx_time);
+		MAX(MIN(conn->lll.dle.local.max_rx_time, conn->lll.dle.remote.max_tx_time),
+		    min_eff_rx_time);
 
 	if (eff_tx_time != conn->lll.dle.eff.max_tx_time) {
 		conn->lll.dle.eff.max_tx_time = eff_tx_time;

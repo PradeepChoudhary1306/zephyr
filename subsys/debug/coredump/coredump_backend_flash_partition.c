@@ -5,17 +5,17 @@
  */
 
 #include <errno.h>
-#include <kernel.h>
+#include <zephyr/kernel.h>
 #include <string.h>
-#include <toolchain.h>
-#include <storage/flash_map.h>
-#include <storage/stream_flash.h>
-#include <sys/util.h>
+#include <zephyr/toolchain.h>
+#include <zephyr/storage/flash_map.h>
+#include <zephyr/storage/stream_flash.h>
+#include <zephyr/sys/util.h>
 
-#include <debug/coredump.h>
+#include <zephyr/debug/coredump.h>
 #include "coredump_internal.h"
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(coredump, CONFIG_KERNEL_LOG_LEVEL);
 
 /**
@@ -498,7 +498,7 @@ static int coredump_flash_backend_cmd(enum coredump_cmd_id cmd_id,
 }
 
 
-struct z_coredump_backend_api z_coredump_backend_flash_partition = {
+struct coredump_backend_api coredump_backend_flash_partition = {
 	.start = coredump_flash_backend_start,
 	.end = coredump_flash_backend_end,
 	.buffer_output = coredump_flash_backend_buffer_output,
@@ -508,7 +508,7 @@ struct z_coredump_backend_api z_coredump_backend_flash_partition = {
 
 
 #ifdef CONFIG_DEBUG_COREDUMP_SHELL
-#include <shell/shell.h>
+#include <zephyr/shell/shell.h>
 
 /* Length of buffer of printable size */
 #define PRINT_BUF_SZ		64

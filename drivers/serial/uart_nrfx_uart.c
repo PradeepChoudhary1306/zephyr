@@ -8,12 +8,13 @@
  * @brief Driver for Nordic Semiconductor nRF5X UART
  */
 
-#include <drivers/uart.h>
-#include <pm/device.h>
+#include <zephyr/drivers/uart.h>
+#include <zephyr/pm/device.h>
+#include <soc.h>
 #include <hal/nrf_uart.h>
 
 #ifdef CONFIG_PINCTRL
-#include <drivers/pinctrl.h>
+#include <zephyr/drivers/pinctrl.h>
 #else
 #include <hal/nrf_gpio.h>
 #endif /* CONFIG_PINCTRL */
@@ -32,11 +33,11 @@
 #define BAUDRATE	PROP(current_speed)
 
 #ifdef CONFIG_PINCTRL
-#define DISABLE_RX	HAS_PROP(disable_rx)
+#define DISABLE_RX	PROP(disable_rx)
 #else
 #define DISABLE_RX	!HAS_PROP(rx_pin)
 #endif /* CONFIG_PINCTRL */
-#define HW_FLOW_CONTROL_AVAILABLE	HAS_PROP(hw_flow_control)
+#define HW_FLOW_CONTROL_AVAILABLE	PROP(hw_flow_control)
 
 #define IRQN		DT_INST_IRQN(0)
 #define IRQ_PRIO	DT_INST_IRQ(0, priority)
@@ -60,17 +61,6 @@ struct uart_nrfx_config {
 struct uart_nrfx_data {
 	struct uart_config uart_config;
 };
-
-static inline const struct uart_nrfx_config *get_dev_config(
-	const struct device *dev)
-{
-	return dev->config;
-}
-
-static inline struct uart_nrfx_data *get_dev_data(const struct device *dev)
-{
-	return dev->data;
-}
 
 #ifdef CONFIG_UART_0_ASYNC
 static struct {
@@ -117,7 +107,7 @@ static volatile bool disable_tx_irq;
 #ifndef CONFIG_PINCTRL
 static void uart_nrfx_pins_configure(const struct device *dev, bool sleep)
 {
-	const struct uart_nrfx_config *cfg = get_dev_config(dev);
+	const struct uart_nrfx_config *cfg = dev->config;
 
 	if (!sleep) {
 		if (cfg->tx_pin != NRF_UART_PSEL_DISCONNECTED) {
@@ -192,7 +182,8 @@ static void event_txdrdy_clear(void)
  * @param dev UART device struct
  * @param baudrate Baud rate
  *
- * @return N/A
+ * @retval 0 on success.
+ * @retval -EINVAL for invalid baudrate.
  */
 
 static int baudrate_set(const struct device *dev, uint32_t baudrate)
@@ -382,6 +373,7 @@ static int uart_nrfx_err_check(const struct device *dev)
 static int uart_nrfx_configure(const struct device *dev,
 			       const struct uart_config *cfg)
 {
+	struct uart_nrfx_data *data = dev->data;
 	nrf_uart_config_t uart_cfg;
 
 #if defined(UART_CONFIG_STOP_Msk)
@@ -446,7 +438,7 @@ static int uart_nrfx_configure(const struct device *dev,
 
 	nrf_uart_configure(uart0_addr, &uart_cfg);
 
-	get_dev_data(dev)->uart_config = *cfg;
+	data->uart_config = *cfg;
 
 	return 0;
 }
@@ -455,7 +447,9 @@ static int uart_nrfx_configure(const struct device *dev,
 static int uart_nrfx_config_get(const struct device *dev,
 				struct uart_config *cfg)
 {
-	*cfg = get_dev_data(dev)->uart_config;
+	struct uart_nrfx_data *data = dev->data;
+
+	*cfg = data->uart_config;
 	return 0;
 }
 #endif /* CONFIG_UART_USE_RUNTIME_CONFIGURE */
@@ -1001,8 +995,6 @@ static void uart_nrfx_irq_callback_set(const struct device *dev,
  * This simply calls the callback function, if one exists.
  *
  * @param arg Argument to ISR.
- *
- * @return N/A
  */
 static void uart_nrfx_isr(const struct device *dev)
 {
@@ -1047,9 +1039,10 @@ static void uart_nrfx_isr(const struct device *dev)
  */
 static int uart_nrfx_init(const struct device *dev)
 {
+	struct uart_nrfx_data *data = dev->data;
 	int err;
 #ifdef CONFIG_PINCTRL
-	const struct uart_nrfx_config *config = get_dev_config(dev);
+	const struct uart_nrfx_config *config = dev->config;
 #endif /* CONFIG_PINCTRL */
 
 	nrf_uart_disable(uart0_addr);
@@ -1064,7 +1057,7 @@ static int uart_nrfx_init(const struct device *dev)
 #endif /* CONFIG_PINCTRL */
 
 	/* Set initial configuration */
-	err = uart_nrfx_configure(dev, &get_dev_data(dev)->uart_config);
+	err = uart_nrfx_configure(dev, &data->uart_config);
 	if (err) {
 		return err;
 	}
@@ -1149,7 +1142,7 @@ static int uart_nrfx_pm_action(const struct device *dev,
 			       enum pm_device_action action)
 {
 #ifdef CONFIG_PINCTRL
-	const struct uart_nrfx_config *config = get_dev_config(dev);
+	const struct uart_nrfx_config *config = dev->config;
 	int ret;
 #endif
 
@@ -1200,6 +1193,9 @@ static int uart_nrfx_pm_action(const struct device *dev,
 PINCTRL_DT_INST_DEFINE(0);
 #endif /* CONFIG_PINCTRL */
 
+NRF_DT_CHECK_PIN_ASSIGNMENTS(DT_DRV_INST(0), 1,
+			     tx_pin, rx_pin, rts_pin, cts_pin);
+
 static const struct uart_nrfx_config uart_nrfx_uart0_config = {
 #ifdef CONFIG_PINCTRL
 	.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(0),
@@ -1232,7 +1228,7 @@ PM_DEVICE_DT_INST_DEFINE(0, uart_nrfx_pm_action);
 
 DEVICE_DT_INST_DEFINE(0,
 	      uart_nrfx_init,
-	      PM_DEVICE_DT_INST_REF(0),
+	      PM_DEVICE_DT_INST_GET(0),
 	      &uart_nrfx_uart0_data,
 	      &uart_nrfx_uart0_config,
 	      /* Initialize UART device before UART console. */

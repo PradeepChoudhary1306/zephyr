@@ -9,18 +9,18 @@
 #include <errno.h>
 #include <stddef.h>
 
-#include <zephyr.h>
-#include <arch/cpu.h>
+#include <zephyr/zephyr.h>
+#include <zephyr/arch/cpu.h>
 
-#include <init.h>
-#include <drivers/uart.h>
-#include <sys/util.h>
-#include <sys/byteorder.h>
+#include <zephyr/init.h>
+#include <zephyr/drivers/uart.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/sys/byteorder.h>
 #include <string.h>
 
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/hci.h>
-#include <drivers/bluetooth/hci_driver.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/hci.h>
+#include <zephyr/drivers/bluetooth/hci_driver.h>
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
 #define LOG_MODULE_NAME bt_driver
@@ -164,8 +164,7 @@ static inline void get_evt_hdr(void)
 
 	if (!rx.remaining) {
 		if (rx.evt.evt == BT_HCI_EVT_LE_META_EVENT &&
-		    (rx.hdr[sizeof(*hdr)] == BT_HCI_EVT_LE_ADVERTISING_REPORT ||
-		     rx.hdr[sizeof(*hdr)] == BT_HCI_EVT_LE_EXT_ADVERTISING_REPORT)) {
+		    (rx.hdr[sizeof(*hdr)] == BT_HCI_EVT_LE_ADVERTISING_REPORT)) {
 			BT_DBG("Marking adv report as discardable");
 			rx.discardable = true;
 		}
@@ -341,7 +340,8 @@ static inline void read_payload(void)
 
 	reset_rx();
 
-	if (evt_flags & BT_HCI_EVT_FLAG_RECV_PRIO) {
+	if (IS_ENABLED(CONFIG_BT_RECV_BLOCKING) &&
+	    (evt_flags & BT_HCI_EVT_FLAG_RECV_PRIO)) {
 		BT_DBG("Calling bt_recv_prio(%p)", buf);
 		bt_recv_prio(buf);
 	}
@@ -529,11 +529,29 @@ static int h4_open(void)
 	return 0;
 }
 
+#if defined(CONFIG_BT_HCI_SETUP)
+static int h4_setup(void)
+{
+	/* Extern bt_h4_vnd_setup function.
+	 * This function executes vendor-specific commands sequence to
+	 * initialize BT Controller before BT Host executes Reset sequence.
+	 * bt_h4_vnd_setup function must be implemented in vendor-specific HCI
+	 * extansion module if CONFIG_BT_HCI_SETUP is enabled.
+	 */
+	extern int bt_h4_vnd_setup(const struct device *dev);
+
+	return bt_h4_vnd_setup(h4_dev);
+}
+#endif
+
 static const struct bt_hci_driver drv = {
 	.name		= "H:4",
 	.bus		= BT_HCI_DRIVER_BUS_UART,
 	.open		= h4_open,
 	.send		= h4_send,
+#if defined(CONFIG_BT_HCI_SETUP)
+	.setup		= h4_setup
+#endif
 };
 
 static int bt_uart_init(const struct device *unused)

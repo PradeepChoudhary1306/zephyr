@@ -5,12 +5,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <pm/device.h>
-#include <pm/device_runtime.h>
-#include <sys/__assert.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/device_runtime.h>
+#include <zephyr/sys/__assert.h>
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(pm_device, CONFIG_PM_DEVICE_LOG_LEVEL);
+
+#ifdef CONFIG_PM_DEVICE_POWER_DOMAIN
+#define PM_DOMAIN(_pm) \
+	(_pm)->domain
+#else
+#define PM_DOMAIN(_pm) NULL
+#endif
 
 /**
  * @brief Suspend a device
@@ -81,16 +88,28 @@ unlock:
 static void runtime_suspend_work(struct k_work *work)
 {
 	int ret;
-	struct pm_device *pm = CONTAINER_OF(work, struct pm_device, work);
+	struct k_work_delayable *dwork = k_work_delayable_from_work(work);
+	struct pm_device *pm = CONTAINER_OF(dwork, struct pm_device, work);
 
 	ret = pm->action_cb(pm->dev, PM_DEVICE_ACTION_SUSPEND);
 
 	(void)k_mutex_lock(&pm->lock, K_FOREVER);
-	if (ret == 0) {
+	if (ret < 0) {
+		pm->usage++;
+		pm->state = PM_DEVICE_STATE_ACTIVE;
+	} else {
 		pm->state = PM_DEVICE_STATE_SUSPENDED;
 	}
 	k_condvar_broadcast(&pm->condvar);
 	k_mutex_unlock(&pm->lock);
+
+	/*
+	 * On async put, we have to suspend the domain when the device
+	 * finishes its operation
+	 */
+	if (PM_DOMAIN(pm) != NULL) {
+		(void)pm_device_runtime_put(PM_DOMAIN(pm));
+	}
 
 	__ASSERT(ret == 0, "Could not suspend device (%d)", ret);
 }
@@ -100,6 +119,10 @@ int pm_device_runtime_get(const struct device *dev)
 	int ret = 0;
 	struct pm_device *pm = dev->pm;
 
+	if (pm == NULL) {
+		return -ENOTSUP;
+	}
+
 	SYS_PORT_TRACING_FUNC_ENTER(pm, device_runtime_get, dev);
 
 	if (!k_is_pre_kernel()) {
@@ -108,6 +131,17 @@ int pm_device_runtime_get(const struct device *dev)
 
 	if ((pm->flags & BIT(PM_DEVICE_FLAG_RUNTIME_ENABLED)) == 0U) {
 		goto unlock;
+	}
+
+	/*
+	 * If the device is under a power domain, the domain has to be get
+	 * first.
+	 */
+	if (PM_DOMAIN(pm) != NULL) {
+		ret = pm_device_runtime_get(PM_DOMAIN(pm));
+		if (ret != 0) {
+			goto unlock;
+		}
 	}
 
 	pm->usage++;
@@ -145,8 +179,19 @@ int pm_device_runtime_put(const struct device *dev)
 {
 	int ret;
 
+	if (dev->pm == NULL) {
+		return -ENOTSUP;
+	}
+
 	SYS_PORT_TRACING_FUNC_ENTER(pm, device_runtime_put, dev);
 	ret = runtime_suspend(dev, false);
+
+	/*
+	 * Now put the domain
+	 */
+	if ((ret == 0) && PM_DOMAIN(dev->pm) != NULL) {
+		ret = pm_device_runtime_put(PM_DOMAIN(dev->pm));
+	}
 	SYS_PORT_TRACING_FUNC_EXIT(pm, device_runtime_put, dev, ret);
 
 	return ret;
@@ -155,6 +200,10 @@ int pm_device_runtime_put(const struct device *dev)
 int pm_device_runtime_put_async(const struct device *dev)
 {
 	int ret;
+
+	if (dev->pm == NULL) {
+		return -ENOTSUP;
+	}
 
 	SYS_PORT_TRACING_FUNC_ENTER(pm, device_runtime_put_async, dev);
 	ret = runtime_suspend(dev, true);
@@ -167,6 +216,10 @@ int pm_device_runtime_enable(const struct device *dev)
 {
 	int ret = 0;
 	struct pm_device *pm = dev->pm;
+
+	if (pm == NULL) {
+		return -ENOTSUP;
+	}
 
 	SYS_PORT_TRACING_FUNC_ENTER(pm, device_runtime_enable, dev);
 
@@ -194,9 +247,9 @@ int pm_device_runtime_enable(const struct device *dev)
 		if (ret < 0) {
 			goto unlock;
 		}
+		pm->state = PM_DEVICE_STATE_SUSPENDED;
 	}
 
-	pm->state = PM_DEVICE_STATE_SUSPENDED;
 	pm->usage = 0U;
 
 	atomic_set_bit(&pm->flags, PM_DEVICE_FLAG_RUNTIME_ENABLED);
@@ -215,6 +268,10 @@ int pm_device_runtime_disable(const struct device *dev)
 {
 	int ret = 0;
 	struct pm_device *pm = dev->pm;
+
+	if (pm == NULL) {
+		return -ENOTSUP;
+	}
 
 	SYS_PORT_TRACING_FUNC_ENTER(pm, device_runtime_disable, dev);
 
@@ -260,5 +317,5 @@ bool pm_device_runtime_is_enabled(const struct device *dev)
 {
 	struct pm_device *pm = dev->pm;
 
-	return atomic_test_bit(&pm->flags, PM_DEVICE_FLAG_RUNTIME_ENABLED);
+	return pm && atomic_test_bit(&pm->flags, PM_DEVICE_FLAG_RUNTIME_ENABLED);
 }
