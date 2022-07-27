@@ -6,10 +6,10 @@
 
 #include <stdint.h>
 
-#include <toolchain.h>
+#include <zephyr/toolchain.h>
 
-#include <sys/util.h>
-#include <sys/byteorder.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/sys/byteorder.h>
 
 #include "hal/ccm.h"
 #include "hal/radio.h"
@@ -101,10 +101,10 @@ static int init_reset(void)
 
 static int prepare_cb(struct lll_prepare_param *p)
 {
-#if defined(CONFIG_BT_CTRL_DF_CONN_CTE_RX)
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_RX)
 	struct lll_df_conn_rx_params *df_rx_params;
 	struct lll_df_conn_rx_cfg *df_rx_cfg;
-#endif /* CONFIG_BT_CTRL_DF_CONN_CTE_RX */
+#endif /* CONFIG_BT_CTLR_DF_CONN_CTE_RX */
 	uint32_t ticks_at_event;
 	uint32_t ticks_at_start;
 	uint16_t event_counter;
@@ -213,19 +213,23 @@ static int prepare_cb(struct lll_prepare_param *p)
 
 	radio_tmr_tifs_set(EVENT_IFS_US);
 
-#if defined(CONFIG_BT_CTRL_DF_CONN_CTE_RX)
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_RX)
 #if defined(CONFIG_BT_CTLR_DF_PHYEND_OFFSET_COMPENSATION_ENABLE)
 	enum radio_end_evt_delay_state end_evt_delay;
 #endif /* CONFIG_BT_CTLR_DF_PHYEND_OFFSET_COMPENSATION_ENABLE */
 
+#if defined(CONFIG_BT_CTLR_PHY)
 	if (lll->phy_rx != PHY_CODED) {
+#else
+	if (1) {
+#endif /* CONFIG_BT_CTLR_PHY */
 		df_rx_cfg = &lll->df_rx_cfg;
 		df_rx_params = dbuf_latest_get(&df_rx_cfg->hdr, NULL);
 
 		if (df_rx_params->is_enabled == true) {
 			lll_df_conf_cte_rx_enable(df_rx_params->slot_durations,
 						  df_rx_params->ant_sw_len, df_rx_params->ant_ids,
-						  data_chan_use, CTE_INFO_IN_S1_BYTE);
+						  data_chan_use, CTE_INFO_IN_S1_BYTE, lll->phy_rx);
 			lll->df_rx_cfg.chan = data_chan_use;
 		} else {
 			lll_df_conf_cte_info_parsing_enable();
@@ -247,7 +251,7 @@ static int prepare_cb(struct lll_prepare_param *p)
 #endif /* !CONFIG_BT_CTLR_PHY */
 
 #endif /* CONFIG_BT_CTLR_DF_PHYEND_OFFSET_COMPENSATION_ENABLE */
-#endif /* CONFIG_BT_CTRL_DF_CONN_CTE_RX */
+#endif /* CONFIG_BT_CTLR_DF_CONN_CTE_RX */
 
 	/* Use regular API for cases when:
 	 * - CTE RX is not enabled,

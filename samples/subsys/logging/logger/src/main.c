@@ -4,17 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <zephyr.h>
+#include <zephyr/zephyr.h>
 #include <string.h>
-#include <sys/printk.h>
+#include <zephyr/sys/printk.h>
 #include "sample_instance.h"
 #include "sample_module.h"
 #include "ext_log_system.h"
 #include "ext_log_system_adapter.h"
-#include <logging/log_ctrl.h>
-#include <app_memory/app_memdomain.h>
+#include <zephyr/logging/log_ctrl.h>
+#include <zephyr/app_memory/app_memdomain.h>
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main);
 
 #ifdef CONFIG_USERSPACE
@@ -30,7 +30,7 @@ static struct k_mem_partition *app_parts[] = {
 #endif /* CONFIG_USERSPACE */
 
 /* size of stack area used by each thread */
-#define STACKSIZE (1024 + CONFIG_TEST_EXTRA_STACKSIZE)
+#define STACKSIZE (1024 + CONFIG_TEST_EXTRA_STACK_SIZE)
 
 extern void sample_module_func(void);
 
@@ -208,12 +208,12 @@ static void wait_on_log_flushed(void)
  */
 static void performance_showcase(void)
 {
-/* Arbitrary limit when LOG_IMMEDIATE is enabled. */
+/* Arbitrary limit when LOG_MODE_IMMEDIATE is enabled. */
 #define LOG_IMMEDIATE_TEST_MESSAGES_LIMIT 50
 
 	volatile uint32_t current_timestamp;
 	volatile uint32_t start_timestamp;
-	uint32_t limit = COND_CODE_1(CONFIG_LOG_IMMEDIATE,
+	uint32_t limit = COND_CODE_1(CONFIG_LOG_MODE_IMMEDIATE,
 			     (LOG_IMMEDIATE_TEST_MESSAGES_LIMIT),
 			     (CONFIG_LOG_BUFFER_SIZE / sizeof(struct log_msg)));
 	uint32_t per_sec;

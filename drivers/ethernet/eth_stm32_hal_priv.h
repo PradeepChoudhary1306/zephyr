@@ -6,7 +6,7 @@
 #ifndef ZEPHYR_DRIVERS_ETHERNET_ETH_STM32_HAL_PRIV_H_
 #define ZEPHYR_DRIVERS_ETHERNET_ETH_STM32_HAL_PRIV_H_
 
-#include <kernel.h>
+#include <zephyr/kernel.h>
 #include <zephyr/types.h>
 
 #define ST_OUI_B0 0x00
@@ -54,10 +54,5 @@ struct eth_stm32_hal_dev_data {
 	float clk_ratio_adj;
 #endif /* CONFIG_PTP_CLOCK_STM32_HAL */
 };
-
-#define DEV_CFG(dev) \
-	((const struct eth_stm32_hal_dev_cfg *)(dev)->config)
-#define DEV_DATA(dev) \
-	((struct eth_stm32_hal_dev_data *)(dev)->data)
 
 #endif /* ZEPHYR_DRIVERS_ETHERNET_ETH_STM32_HAL_PRIV_H_ */

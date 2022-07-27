@@ -15,8 +15,8 @@
 
 	chosen {
 		zephyr,sram = &sdram0;
-		zephyr,itcm = &itcm;
 		zephyr,dtcm = &dtcm;
+		zephyr,itcm = &itcm;
 		zephyr,console = &lpuart1;
 		zephyr,shell-uart = &lpuart1;
 		zephyr,canbus = &flexcan3;
@@ -40,6 +40,10 @@
 &flexcan3 {
 	status = "okay";
 	bus-speed = <125000>;
+
+	can-transceiver {
+		max-bitrate = <5000000>;
+	};
 };
 
 &lpi2c1 {
@@ -112,5 +116,18 @@
 };
 
 &edma0 {
+	status = "okay";
+};
+
+&enet {
+	status = "okay";
+	int-gpios = <&gpio9 11 GPIO_ACTIVE_HIGH>;
+	reset-gpios = <&gpio12 12 GPIO_ACTIVE_HIGH>;
+	ptp {
+		status = "okay";
+	};
+};
+
+zephyr_udc0: &usb1 {
 	status = "okay";
 };

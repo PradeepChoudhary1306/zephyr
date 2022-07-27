@@ -11,16 +11,16 @@
 #define RADIO_PKT_CONF_PDU_TYPE_MSK BIT(RADIO_PKT_CONF_PDU_TYPE_POS)
 #define RADIO_PKT_CONF_PDU_TYPE_AC (0U)
 #define RADIO_PKT_CONF_PDU_TYPE_DC (1U)
-/* PHY type, two bit field */
+/* PHY type, three bit field */
 #define RADIO_PKT_CONF_PHY_POS (1U)
-#define RADIO_PKT_CONF_PHY_MSK (BIT_MASK(2U) << RADIO_PKT_CONF_PHY_POS)
+#define RADIO_PKT_CONF_PHY_MSK (BIT_MASK(3U))
 #define RADIO_PKT_CONF_PHY_LEGACY (0U)
-#define RADIO_PKT_CONF_PHY_1M (1U)
-#define RADIO_PKT_CONF_PHY_2M (2U)
-#define RADIO_PKT_CONF_PHY_CODED (3U)
+#define RADIO_PKT_CONF_PHY_1M (BIT(0U))
+#define RADIO_PKT_CONF_PHY_2M (BIT(1U))
+#define RADIO_PKT_CONF_PHY_CODED (BIT(2U))
 /* CTE enabled, 1 bit field */
-#define RADIO_PKT_CONF_CTE_POS (3U)
-#define RADIO_PKT_CONF_CTE_MSK BIT(RADIO_PKT_CONF_PDU_TYPE_POS)
+#define RADIO_PKT_CONF_CTE_POS (4U)
+#define RADIO_PKT_CONF_CTE_MSK BIT(0)
 #define RADIO_PKT_CONF_CTE_DISABLED (0U)
 #define RADIO_PKT_CONF_CTE_ENABLED (1U)
 
@@ -39,7 +39,7 @@
 	((uint8_t)((((flags) >> RADIO_PKT_CONF_PHY_POS)) & RADIO_PKT_CONF_PHY_MSK))
 /* Helper macro to create bitfield with CTE type only */
 #define RADIO_PKT_CONF_CTE(phy) ((uint8_t)((phy) << RADIO_PKT_CONF_CTE_POS))
-/* Helper macro to get CTE enable field value from radion packet configuration bitfield */
+/* Helper macro to get CTE enable field value from radio packet configuration bitfield */
 #define RADIO_PKT_CONF_CTE_GET(flags)                                                              \
 	((uint8_t)((((flags) >> RADIO_PKT_CONF_CTE_POS)) & RADIO_PKT_CONF_CTE_MSK))
 /* Helper macro to create a radio packet configure bitfield */
@@ -55,6 +55,7 @@ void radio_isr_set(radio_isr_cb_t cb, void *param);
 
 void radio_setup(void);
 void radio_reset(void);
+void radio_stop(void);
 void radio_phy_set(uint8_t phy, uint8_t flags);
 void radio_tx_power_set(int8_t power);
 void radio_tx_power_max_set(void);
@@ -95,6 +96,8 @@ void radio_switch_complete_with_delay_compensation_and_tx(
 	uint8_t phy_rx, uint8_t flags_rx, uint8_t phy_tx, uint8_t flags_tx,
 	enum radio_end_evt_delay_state end_evt_delay_en);
 void radio_switch_complete_and_b2b_tx(uint8_t phy_curr, uint8_t flags_curr,
+				      uint8_t phy_next, uint8_t flags_next);
+void radio_switch_complete_and_b2b_rx(uint8_t phy_curr, uint8_t flags_curr,
 				      uint8_t phy_next, uint8_t flags_next);
 void radio_switch_complete_and_disable(void);
 

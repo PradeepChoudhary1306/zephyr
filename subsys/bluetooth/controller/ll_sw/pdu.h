@@ -79,6 +79,7 @@
 /* Data channel minimum payload size and time */
 #define PDU_DC_PAYLOAD_SIZE_MIN 27
 #define PDU_DC_PAYLOAD_TIME_MIN 328
+#define PDU_DC_PAYLOAD_TIME_MIN_CODED 2704
 
 /* Link Layer header size of Data PDU. Assumes pdu_data is packed */
 #define PDU_DC_LL_HEADER_SIZE  (offsetof(struct pdu_data, lldata))
@@ -99,8 +100,10 @@
 #define EVENT_MAFS_US           300
 /* Standard allows 2 us timing uncertainty inside the event */
 #define EVENT_MAFS_MAX_US       (EVENT_MAFS_US + EVENT_CLOCK_JITTER_US)
-/* Controller defined back to back transmit MAFS */
+/* Controller defined back to back transmit MAFS for extended advertising */
 #define EVENT_B2B_MAFS_US       (CONFIG_BT_CTLR_ADV_PDU_BACK2BACK_AFS)
+/* Controller defined back to back transmit MAFS for periodic advertising */
+#define EVENT_SYNC_B2B_MAFS_US  (CONFIG_BT_CTLR_ADV_SYNC_PDU_BACK2BACK_AFS)
 /* Minimum Subevent Space timings */
 #define EVENT_MSS_US            150
 /* Standard allows 2 us timing uncertainty inside the event */
@@ -124,7 +127,7 @@
 #define OFFS_UNIT_VALUE_30_US  0
 #define OFFS_UNIT_VALUE_300_US 1
 /* Value specified in BT Spec. Vol 6, Part B, section 2.3.4.6 */
-#define OFFS_ADJUST_US         245760
+#define OFFS_ADJUST_US         2457600UL
 
 /* Advertiser's Sleep Clock Accuracy Value */
 #define SCA_500_PPM       500 /* 51 ppm to 500 ppm */
@@ -685,25 +688,23 @@ struct pdu_data_llctrl_cte_rsp {
 } __packed;
 
 struct pdu_data_llctrl_cis_req {
-	uint8_t cig_id;
-	uint8_t cis_id;
-	uint8_t c_phy;
-	uint8_t p_phy;
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-	uint16_t c_max_sdu:12;
-	uint16_t rfu0:3;
-	uint16_t framed:1;
-	uint16_t p_max_sdu:12;
-	uint16_t rfu1:4;
-#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-	uint16_t framed:1;
-	uint16_t rfu0:3;
-	uint16_t c_max_sdu:12;
-	uint16_t rfu1:4;
-	uint16_t p_max_sdu:12;
-#else
-#error "Unsupported endianness"
-#endif
+	uint8_t  cig_id;
+	uint8_t  cis_id;
+	uint8_t  c_phy;
+	uint8_t  p_phy;
+	/* c_max_sdu:12
+	 * rfu:3
+	 * framed:1
+	 * NOTE: This layout as bitfields is not portable for BE using
+	 * endianness conversion macros.
+	 */
+	uint8_t  c_max_sdu_packed[2];
+	/* p_max_sdu:12
+	 * rfu:4
+	 * NOTE: This layout as bitfields is not portable for BE using
+	 * endianness conversion macros.
+	 */
+	uint8_t  p_max_sdu[2];
 	uint8_t  c_sdu_interval[3];
 	uint8_t  p_sdu_interval[3];
 	uint16_t c_max_pdu;
@@ -809,11 +810,19 @@ struct pdu_data {
 	uint8_t nesn:1;
 	uint8_t sn:1;
 	uint8_t md:1;
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_TX) || defined(CONFIG_BT_CTLR_DF_CONN_CTE_RX)
 	uint8_t cp:1;
 	uint8_t rfu:2;
+#else
+	uint8_t rfu:3;
+#endif
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_TX) || defined(CONFIG_BT_CTLR_DF_CONN_CTE_RX)
 	uint8_t rfu:2;
 	uint8_t cp:1;
+#else
+	uint8_t rfu:3;
+#endif
 	uint8_t md:1;
 	uint8_t sn:1;
 	uint8_t nesn:1;
@@ -848,7 +857,7 @@ struct pdu_data {
 } __packed;
 
 /* Generic ISO pdu, could be CIS or BIS
- * To be used when reffering to component withouth knowing CIS or BIS type
+ * To be used when referring to component without knowing CIS or BIS type
  */
 struct pdu_iso {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
@@ -892,6 +901,15 @@ struct pdu_iso_sdu_sh {
 #error "Unsupported endianness"
 #endif /* __BYTE_ORDER__ */
 } __packed;
+
+enum pdu_cis_llid {
+	/** Unframed complete or end fragment */
+	PDU_CIS_LLID_COMPLETE_END = 0x00,
+	/** Unframed start or continuation fragment */
+	PDU_CIS_LLID_START_CONTINUE = 0x01,
+	/** Framed; one or more segments of a SDU */
+	PDU_CIS_LLID_FRAMED = 0x02
+};
 
 struct pdu_cis {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
@@ -1033,3 +1051,38 @@ struct pdu_big_info {
 #define PDU_BIG_INFO_ENCRYPTED_SIZE sizeof(struct pdu_big_info)
 #define PDU_BIG_BN_MAX              0x07
 #define PDU_BIG_PAYLOAD_COUNT_MAX   28
+
+struct pdu_dtm {
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+	uint8_t type:4;
+	uint8_t rfu0:1;
+#if defined(CONFIG_BT_CTLR_DF_CTE_TX)
+	uint8_t cp:1;
+	uint8_t rfu1:2;
+#else
+	uint8_t rfu1:3;
+#endif
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#if defined(CONFIG_BT_CTLR_DF_CTE_TX)
+	uint8_t rfu1:2;
+	uint8_t cp:1;
+#else
+	uint8_t rfu1:3;
+#endif
+	uint8_t rfu0:1;
+	uint8_t type:4;
+#else
+#error "Unsupported endianness"
+#endif
+	uint8_t length;
+#if defined(CONFIG_BT_CTLR_DF_CTE_TX)
+	union {
+		uint8_t resv; /* TODO: remove nRF specific code */
+		struct pdu_cte_info cte_info; /* BT 5.1 Core spec. CTEInfo storage */
+	};
+#endif
+	uint8_t payload[0];
+} __packed;
+
+/* Direct Test Mode maximum payload size */
+#define PDU_DTM_PAYLOAD_SIZE_MAX 255

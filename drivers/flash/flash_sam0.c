@@ -7,13 +7,13 @@
 #define DT_DRV_COMPAT atmel_sam0_nvmctrl
 
 #define LOG_LEVEL CONFIG_FLASH_LOG_LEVEL
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(flash_sam0);
 
-#include <device.h>
-#include <drivers/flash.h>
-#include <init.h>
-#include <kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/flash.h>
+#include <zephyr/init.h>
+#include <zephyr/kernel.h>
 #include <soc.h>
 #include <string.h>
 
@@ -291,7 +291,7 @@ static int flash_sam0_write(const struct device *dev, off_t offset,
 	}
 
 	if ((offset % FLASH_PAGE_SIZE) != 0) {
-		LOG_WRN("0x%lx: not on a write block boundrary", (long)offset);
+		LOG_WRN("0x%lx: not on a write block boundary", (long)offset);
 		return -EINVAL;
 	}
 
@@ -352,7 +352,7 @@ static int flash_sam0_erase(const struct device *dev, off_t offset,
 	}
 
 	if ((offset % ROW_SIZE) != 0) {
-		LOG_WRN("0x%lx: not on a page boundrary", (long)offset);
+		LOG_WRN("0x%lx: not on a page boundary", (long)offset);
 		return -EINVAL;
 	}
 
@@ -476,4 +476,4 @@ static struct flash_sam0_data flash_sam0_data_0;
 
 DEVICE_DT_INST_DEFINE(0, flash_sam0_init, NULL,
 		    &flash_sam0_data_0, NULL, POST_KERNEL,
-		    CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &flash_sam0_api);
+		    CONFIG_FLASH_INIT_PRIORITY, &flash_sam0_api);

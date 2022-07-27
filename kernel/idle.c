@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <kernel.h>
-#include <toolchain.h>
-#include <linker/sections.h>
-#include <drivers/timer/system_timer.h>
-#include <wait_q.h>
-#include <pm/pm.h>
+#include <zephyr/kernel.h>
+#include <zephyr/toolchain.h>
+#include <zephyr/linker/sections.h>
+#include <zephyr/drivers/timer/system_timer.h>
+#include <zephyr/wait_q.h>
+#include <zephyr/pm/pm.h>
 #include <stdbool.h>
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 #include <ksched.h>
 #include <kswap.h>
 
@@ -79,7 +79,7 @@ void idle(void *unused1, void *unused2, void *unused3)
 		 * which is essential for the kernel's scheduling
 		 * logic.
 		 */
-		if (pm_system_suspend(_kernel.idle) == false) {
+		if (k_is_pre_kernel() || !pm_system_suspend(_kernel.idle)) {
 			k_cpu_idle();
 		}
 #else

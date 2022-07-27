@@ -11,18 +11,18 @@
  */
 #include <errno.h>
 
-#include <kernel.h>
-#include <device.h>
-#include <init.h>
-#include <sys/byteorder.h>
-#include <sys/util.h>
-#include <drivers/gpio.h>
-#include <drivers/i2c.h>
+#include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/init.h>
+#include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/i2c.h>
 
 #include "gpio_utils.h"
 
 #define LOG_LEVEL CONFIG_GPIO_LOG_LEVEL
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(stmpe1600);
 
 /* Register definitions */
@@ -204,7 +204,7 @@ static int stmpe1600_port_get_raw(const struct device *dev, uint32_t *value)
 static int stmpe1600_port_set_masked_raw(const struct device *dev,
 					 uint32_t mask, uint32_t value)
 {
-	struct stmpe1600_drvdata *const drvdata = (struct stmpe1600_drvdata *const)dev->data;
+	struct stmpe1600_drvdata *const drvdata = dev->data;
 	uint16_t GPSR;
 	int ret;
 
@@ -235,7 +235,7 @@ static int stmpe1600_port_clear_bits_raw(const struct device *dev, uint32_t mask
 
 static int stmpe1600_port_toggle_bits(const struct device *dev, uint32_t mask)
 {
-	struct stmpe1600_drvdata *const drvdata = (struct stmpe1600_drvdata *const)dev->data;
+	struct stmpe1600_drvdata *const drvdata = dev->data;
 	uint16_t GPSR;
 	int ret;
 
