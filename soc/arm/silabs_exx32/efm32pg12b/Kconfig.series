@@ -21,5 +21,6 @@ config SOC_SERIES_EFM32PG12B
 	select SOC_GECKO_TRNG
 	select SOC_GECKO_DEV_INIT 
 	select SERIES_1
+	select COUNTER_GECKO_STIMER
 	help
 	  Enable support for EFM32 PearlGecko MCU series
